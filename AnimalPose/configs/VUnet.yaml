@@ -1,0 +1,7 @@
+model: AnimalPose.models.VUnet
+
+with_skip_in:
+  - image
+  - flow
+without_skip_in:
+  - target

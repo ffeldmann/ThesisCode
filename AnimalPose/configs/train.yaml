@@ -1,0 +1,57 @@
+iterator: AnimalPose.train.Iterator
+batch_size: 8
+#num_epochs: 2
+num_steps: 500001
+
+lr: 0.0001
+
+nogpu: False  # False -> use GPU
+
+#train_head_tail_first:
+#  n: 10000
+#  layers_to_train:
+#    - 'conv1'
+#    - 'final_flow'
+
+
+warping:
+  none
+  # backward_warp_gird_sample
+  # backward_warp_nvidia
+  # forward_warp_plain
+  # forward_warp_rescaling
+
+losses:
+  color_L1:
+    weight: 1
+  masked_L1:
+    weight: 10
+    mask_threshold: 0.5
+    mask_sigma: 3
+  color_gradient:
+    weight: 0.
+  color_L2:
+    weight: 0.
+  KL:
+    start_ramp_it: 50000
+    start_ramp_val: 0
+    end_ramp_it: 75000
+    end_ramp_val: 1
+  perceptual:
+    weight: 1.
+    vgg_feat_weights: [1,1,1,1,1,1]
+
+#  flow_smoothness:
+#    weight: 0.1
+
+# logging
+integrations:
+  git:
+    true
+  wandb:
+    active: true
+    handlers:
+      - scalars
+  tensorboardX:
+    active: true
+

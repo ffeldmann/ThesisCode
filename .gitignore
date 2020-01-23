@@ -1,0 +1,21 @@
+# pip
+*.egg-info
+
+# IDEs
+.idea
+.vscode
+
+# logs and checkpoints
+logs
+checkpoints
+wandb
+
+# build and temp
+build
+dist
+__pycache__
+.ipynb_checkpoints
+**/*.cpython-36m-x86_64-linux-gnu.so
+
+# dependencies
+src
