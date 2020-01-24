@@ -1,6 +1,0 @@
-dataroot:  '/home/hperrot/data/Datasets/human3.6M'
-max_dataset_size: 100
-batch_size: 2
-#debug_timing: True
-nogpu: True
-append_times: True

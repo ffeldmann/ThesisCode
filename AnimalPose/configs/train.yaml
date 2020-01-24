@@ -7,20 +7,6 @@ lr: 0.0001
 
 nogpu: False  # False -> use GPU
 
-#train_head_tail_first:
-#  n: 10000
-#  layers_to_train:
-#    - 'conv1'
-#    - 'final_flow'
-
-
-warping:
-  none
-  # backward_warp_gird_sample
-  # backward_warp_nvidia
-  # forward_warp_plain
-  # forward_warp_rescaling
-
 losses:
   color_L1:
     weight: 1
@@ -40,9 +26,6 @@ losses:
   perceptual:
     weight: 1.
     vgg_feat_weights: [1,1,1,1,1,1]
-
-#  flow_smoothness:
-#    weight: 0.1
 
 # logging
 integrations:

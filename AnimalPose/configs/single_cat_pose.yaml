@@ -1,0 +1,5 @@
+dataset: AnimalPose.data.SingleCats
+dataroot: '/export/home/ffeldman/Masterarbeit/data'
+model: AnimalPose.models.VUnet
+iterator: AnimalPose.train.Iterator
+n_classes: 19
