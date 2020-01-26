@@ -9,7 +9,7 @@ class FlowFrameGenModel(nn.Module):
         self.input_channels = 3 + 2
 
         # warping of flow
-        warping_config = self.config["warping"]
+        warping_config = False #self.config["warping"]
 
         assert isinstance(warping_config, str)
 

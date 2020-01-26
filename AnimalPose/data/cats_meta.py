@@ -30,7 +30,7 @@ class SingleCats(MetaDataset):
             "TMiddle": 17,
             "TEnd": 18
         }
-        self.joints = {
+        self.joints = [
                 [0, 1],  # Nose -> LEye
                 [1, 2],  # LEye -> LEar
                 [0, 3],  # Nose -> REye
@@ -53,10 +53,10 @@ class SingleCats(MetaDataset):
                 [14, 17],  # RHip -> TMiddle
                 [11, 17],  # RHip -> TMiddle
                 [17, 18],   # TMiddle -> TEnd
-        }
+        ]
 
-     def __len__(self):
-        return len(self.data)
+    def __len__(self):
+        return len(self.labels)
 
 def SingleCatsUNet(SingleCats):
     def __init__(self, config):
