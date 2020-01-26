@@ -1,98 +1,147 @@
 import os
+from typing import Type
+
+import cv2
 import numpy as np
+from skimage.draw import circle, line, line_aa
+
+#JointModel: Type[JointModel] = namedtuple("JointModel","body right_lines left_lines rshoulder lshoulder headup kps_to_use kp_to_joint")
 
 
-def get_flow_folder(config, reverse_flow_input):
-    return os.path.join(
-        config["flow_calc_mode"],
-        ("r_" if reverse_flow_input else "")
-        + str(config["target_frame_step"])
-        + "_"
-        + str(config["load_size"])
-        + "_"
-        + str(config["calc_size"]),
-    )
 
+def make_joint_img(img_shape, joints,joint_model:JointModel, color_channel=None):
+    # channels are opencv so g, b, r
+    scale_factor = img_shape[1] / 128
+    thickness = int(3 * scale_factor)
+    imgs = list()
+    for i in range(3):
+        imgs.append(np.zeros(img_shape[:2], dtype="uint8"))
 
-def num_frames(labels):
-    one_key = next(iter(labels.keys()))
-    return len(labels[one_key])
-
-
-def get_frames_split(labels, split_type, mode):
-    def get_split_indices(mode):
-        assert split_type in ["person", "action", "none"]
-
-        if split_type == "person":
-            labels_to_split = labels["subject"]
-        else:  # split_type == 'action'
-            labels_to_split = labels["action"]
-
-        items_unique = sorted(set(labels_to_split))
-        num_train = int(len(items_unique) * 0.8)  # reserve at least 20% for evaluation
-
-        if mode == "train":
-            split_items = items_unique[:num_train]
-        else:  # mode == 'validation'
-            split_items = items_unique[num_train:]
-
-        # keep only items of train or validation dataset
-        split_indices = np.where(np.isin(labels_to_split, split_items))[0]
-
-        return split_indices
-
-    assert mode in ["train", "validation", "all"]
-    if mode == "all":
-        return np.arange(num_frames(labels))
-    elif mode == "train":
-        return get_split_indices("train")
-    elif mode == "validation":
-        return (get_split_indices("validation"),)
-
-
-def split_sequences(split_indices, sequences):
-
-    split_sequence_ids = np.where(np.isin(sequences[:, 0], split_indices))
-    split_sequences = sequences[split_sequence_ids]
-
-    return split_sequences
-
-
-def get_sequences(labels, base_frame_step, target_frame_step):
-    def same_video(index1, index2):
-        path1 = labels["frame_path"][index1]
-        path2 = labels["frame_path"][index2]
-        return os.path.dirname(path1) == os.path.dirname(path2)
-
-    fids = labels["fid"]
-    new_video_indices = np.where(np.append(np.inf, fids[:-1]) > fids)[0]
-
-    base_indices = np.array([], dtype=np.int64)
-    for i in range(len(new_video_indices)):
-        if i < len(new_video_indices) - 1:
-            stop = new_video_indices[i + 1]
+    body_pts = np.array([[joints[part, :] for part in joint_model.body]])
+    valid_pts = np.all(np.greater_equal(body_pts, [0.0, 0.0]), axis=-1)
+    if np.count_nonzero(valid_pts) > 2:
+        body_pts = np.int_([body_pts[valid_pts]])
+        if color_channel is None:
+            cv2.fillPoly(imgs[2], body_pts, 255)
         else:
-            stop = len(fids)
-        new_base_indices = np.arange(
-            start=new_video_indices[i], stop=stop, step=base_frame_step
-        )
-        base_indices = np.append(base_indices, new_base_indices)
+            cv2.fillPoly(imgs[color_channel], body_pts, 255)
 
-    # base_indices = np.arange(start=0, stop=num_frames(), step=base_frame_step)
-    target_indices = base_indices + target_frame_step
+    for line in joint_model.right_lines:
+        valid_pts = np.greater_equal(joints[line, :], [0.0, 0.0])
+        if np.all(valid_pts):
+            a = tuple(np.int_(joints[line[0], :]))
+            b = tuple(np.int_(joints[line[1], :]))
+            if color_channel is None:
+                cv2.line(imgs[1], a, b, color=255, thickness=thickness)
+            else:
+                cv2.line(
+                    imgs[color_channel], a, b, color=255, thickness=thickness
+                )
+        elif np.any(valid_pts):
+            pre_p = joints[line, :]
+            p = tuple(
+                pre_p[valid_pts]
+                .astype(np.int32)
+            )
 
-    # elliminate too big indices
-    good_indices = np.where(target_indices < num_frames(labels))[0]
-    base_indices = base_indices[good_indices]
-    target_indices = target_indices[good_indices]
+            if color_channel is None:
+                cv2.circle(imgs[1], p, 5, thickness=-1, color=255)
+            else:
+                cv2.circle(imgs[color_channel], p, 5, thickness=-1, color=255)
 
-    # elliminate not same video
-    good_indices = np.where(
-        [same_video(*indices) for indices in zip(base_indices, target_indices)]
-    )[0]
-    base_indices = base_indices[good_indices]
-    target_indices = target_indices[good_indices]
+    for line in joint_model.left_lines:
 
-    sequences = np.stack([base_indices, target_indices], axis=1)
+        valid_pts = np.greater_equal(joints[line, :], [0.0, 0.0])
+        if np.all(valid_pts):
+            a = tuple(np.int_(joints[line[0], :]))
+            b = tuple(np.int_(joints[line[1], :]))
+            if color_channel is None:
+                cv2.line(imgs[0], a, b, color=255, thickness=thickness)
+            else:
+                cv2.line(
+                    imgs[color_channel], a, b, color=255, thickness=thickness
+                )
+        elif np.any(valid_pts):
+            pre_p = joints[line,:]
+            p = tuple(
+                pre_p[valid_pts]
+                    .astype(np.int32)
+            )
 
-    return sequences
+            if color_channel is None:
+                cv2.circle(imgs[0], p, 5, thickness=-1, color=255)
+            else:
+                cv2.circle(imgs[color_channel], p, 5, thickness=-1, color=255)
+
+    rs = joints[joint_model.rshoulder, :]
+    ls = joints[joint_model.lshoulder, :]
+    cn = joints[joint_model.headup, :]
+    if np.any(np.less(np.stack([rs, ls], axis=-1), [0.0, 0.0])):
+        neck = np.asarray([-1.0, -1.0])
+    else:
+        neck = 0.5 * (rs + ls)
+
+    pts = np.stack([neck, cn], axis=-1).transpose()
+
+    valid_pts = np.greater_equal(pts, [0.0, 0.0])
+    if np.all(valid_pts):
+        if color_channel is None:
+            a = tuple(np.int_(pts[0, :]))
+            b = tuple(np.int_(pts[1, :]))
+            cv2.line(imgs[0], a, b, color=127, thickness=thickness)
+            cv2.line(imgs[1], a, b, color=127, thickness=thickness)
+        else:
+            cv2.line(
+                imgs[color_channel],
+                tuple(np.int_(pts[0, :])),
+                tuple(np.int_(pts[1, :])),
+                color=255,
+                thickness=thickness,
+            )
+    elif np.any(valid_pts):
+        p = tuple(pts[np.all(valid_pts, axis=-1), :].astype(np.int32).squeeze())
+        if color_channel is None:
+            cv2.circle(imgs[0], p, 5, color=127, thickness=-1)
+            cv2.circle(imgs[1], p, 5, color=127, thickness=-1)
+        else:
+            cv2.circle(imgs[color_channel], p, 5, color=255, thickness=-1)
+
+    img = np.stack(imgs, axis=-1)
+    if img_shape[-1] == 1:
+        img = np.mean(img, axis=-1)[:, :, None]
+    # img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+    return img
+
+
+
+def add_joints_to_img(img, kps, joints, color_kps=[[255, 0, 0]], color_joints=[[255, 0, 0]]):
+    # params
+    border_safety = 25
+    h, w = img.shape[0:2]
+    r_1 = int(h / 250)
+
+    # draw keypoints
+    if len(color_kps) == 1:
+        color_kps = [color_kps[0] for _ in range(kps.shape[0])]
+
+    for i, kp in enumerate(kps):
+        x = np.min([w - border_safety, kp[0]])  # x
+        y = np.min([h - border_safety, kp[1]])  # y
+        rr, cc = circle(y, x, r_1)
+        img[rr, cc, 0] = color_kps[i][0]
+        img[rr, cc, 1] = color_kps[i][1]
+        img[rr, cc, 2] = color_kps[i][2]
+
+    # draw joints
+    if len(color_joints) == 1:
+        color_joints = [color_joints[0] for _ in range(len(joints))]
+
+    for i, jo in enumerate(joints):
+        rr, cc, val = line_aa(int(kps[jo[0], 1]), int(kps[jo[0], 0]), int(kps[jo[1], 1]),
+                              int(kps[jo[1], 0]))  # [jo_0_y, jo_0_x, jo_1_y, jo_1_x]
+
+        img[rr, cc, 0] = color_joints[i][0] * val
+        img[rr, cc, 1] = color_joints[i][1] * val
+        img[rr, cc, 2] = color_joints[i][2] * val
+
+    return img

@@ -48,17 +48,6 @@ class Human36M(DatasetMixin):
         return len(self.labels["frame_path"])
 
 
-def get_flow_path(image_path):
-    frame_number = image_path.split("/")[-1].split("_")[-1].split(".")[0]
-    rel_save_path = os.path.join(
-        image_path.split("/")[-5],  # person
-        image_path.split("/")[-4],  # action
-        image_path.split("/")[-2],  # camera
-        "flow_" + frame_number + ".flo",  # frame
-    )
-    return rel_save_path
-
-
 class Human36MFramesFlow(DatasetMixin):
     def __init__(self, config):
         super().__init__()
