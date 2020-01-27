@@ -1,7 +1,8 @@
 import os
 import numpy as np
-import skimage
+import skimage.color
 from edflow.data.believers.meta import MetaDataset
+from AnimalPose.data.util import make_heatmaps, Rescale
 #from edflow.data.believers.meta_view import MetaViewDataset
 
 
@@ -9,6 +10,13 @@ class SingleCats(MetaDataset):
     def __init__(self, config):
         super().__init__(config["dataroot"])
         self.config = config
+
+        if "rescale_to" in self.config.keys():
+            self.rescale = Rescale(self.config["rescale_to"])
+        else:
+            # Scaling to default size 128
+            self.rescale = Rescale((128, 128))
+
         self.parts = {
             "Nose": 0,
             "LEye": 1,
@@ -55,25 +63,36 @@ class SingleCats(MetaDataset):
                 [17, 18],   # TMiddle -> TEnd
         ]
 
-    def __len__(self):
-        return len(self.labels)
 
-def SingleCatsUNet(SingleCats):
+class SingleCatsUNet(SingleCats):
     def __init__(self, config):
-        super().__init__(config["dataroot"])
+        super().__init__(config)
 
     def get_example(self, idx):
-        example = dict()
-        example["image"] = self.data[idx][0]
-        example["stickman"] = 5  # stickman function here
+        example = super().get_example(idx)
+        image, keypoints = self.rescale(example["frames"](), self.labels["kps"][idx])
+        if "as_grey" in self.config.keys():
+            example["inp"] = skimage.color.rgb2gray(image)
+            assert(self.config["n_channels"] == 1), ("n_channels should be 1, got {}".format(self.config["n_channels"]))
+        else:
+            example["inp"] = image
+        example["targets"] = make_heatmaps(example["inp"], keypoints)
+        example.pop("frames")
         return example
 
-def SingleCatsVUNet(SingleCats):
+class SingleCatsDLC(SingleCats):
     def __init__(self, config):
-        super().__init__(config["dataroot"])
-
+        super().__init__(config)
     def get_example(self, idx):
-        example = dict()
-        example["image"] = self.data[idx][0]
-        example["stickman"] = 5  # stickman function here
+        example = super().get_example(idx)
         return example
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    cats = SingleCatsUNet({"dataroot": '/export/home/ffeldman/Masterarbeit/data'})
+    ex = cats.get_example(3)
+    for hm in ex["targets"]:
+        print(hm.shape)
+        plt.imshow(hm)
+        plt.show()

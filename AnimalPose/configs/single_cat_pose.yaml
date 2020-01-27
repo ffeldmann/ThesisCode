@@ -1,5 +1,7 @@
-dataset: AnimalPose.data.SingleCats
+dataset: AnimalPose.data.SingleCatsUNet
 dataroot: '/export/home/ffeldman/Masterarbeit/data'
-model: AnimalPose.models.VUnet
-iterator: AnimalPose.train.Iterator
-n_classes: 19
+n_classes: 19 # rgb or grayscale
+n_channels: 1
+bilinear: true
+resize_to: 128, 128
+as_grey: True

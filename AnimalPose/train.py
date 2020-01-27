@@ -1,65 +1,24 @@
-import yaml
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from edflow.project_manager import ProjectManager
-from edflow.hooks.hook import Hook
 import time
 
 import numpy as np
+import torch
+import torch.optim as optim
 from edflow import TemplateIterator, get_logger
 from edflow.util import retrieve, walk
-from edflow.data.util import adjust_support
-from AnimalPose.hooks.model import RestorePretrainedSDCHook, TrainHeadTailFirstNHook
-from AnimalPose.utils.loss_utils import (
-    update_loss_weights_inplace,
-    L1LossInstances,
-    MaskedL1LossInstances,
-    MSELossInstances,
-    aggregate_kl_loss,
-    PerceptualLossInstances,
-)
+import torch.nn.functional
 
-def np2pt(array):
-    tensor = torch.tensor(array, dtype=torch.float32)
-    if torch.cuda.is_available():
-        tensor = tensor.cuda()
-    tensor = tensor.permute(0, 3, 1, 2)
-    return tensor
-
-
-def pt2np(tensor):
-    array = tensor.detach().cpu().numpy()
-    array = np.transpose(array, (0, 2, 3, 1))
-    return array
-
-
+from AnimalPose.hooks.model import RestorePretrainedSDCHook
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # loss and optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr"])
-        self.L1LossInstances = L1LossInstances()
-        self.MSELossInstances = MSELossInstances()
-        if "masked_L1" in self.config["losses"]:
-            self.MaskedL1LossInstances = MaskedL1LossInstances(
-                self.config["losses"]["masked_L1"]
-            )
-        if "perceptual" in self.config["losses"]:
-            self.PerceptualLossInstances = PerceptualLossInstances(
-                self.config["losses"]["perceptual"]
-            )
+        self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
 
-        if torch.cuda.is_available():
+        if self.cuda:
             self.model.cuda()
-            self.L1LossInstances.cuda()
-            self.MSELossInstances.cuda()
-            if "masked_L1" in self.config["losses"]:
-                self.MaskedL1LossInstances.cuda()
-            if "perceptual" in self.config["losses"]:
-                self.PerceptualLossInstances.cuda()
-
         # hooks
         if "pretrained_checkpoint" in self.config.keys():
             self.hooks.append(
@@ -68,16 +27,18 @@ class Iterator(TemplateIterator):
                     model=self.model,
                 )
             )
-        if "train_head_tail_first" in self.config.keys():
-            self.hooks.append(
-                TrainHeadTailFirstNHook(
-                    model=self.model,
-                    n=self.config["train_head_tail_first"]["n"],
-                    layers_to_train=self.config["train_head_tail_first"][
-                        "layers_to_train"
-                    ],
-                )
-            )
+
+    def np2pt(self, array):
+        tensor = torch.from_numpy(array).float()# torch.tensor(array, dtype=torch.float32)
+        if self.cuda:
+            tensor = tensor.cuda()
+        #tensor = tensor.permute(0, 3, 1, 2)
+        return tensor
+
+    def pt2np(self, tensor):
+        array = tensor.detach().cpu().numpy()
+        #array = np.transpose(array, (0, 2, 3, 1))
+        return array
 
     def save(self, checkpoint_path):
         state = {
@@ -93,62 +54,25 @@ class Iterator(TemplateIterator):
 
     def criterion(self, inputs, predictions):
         # update kl weights
-        update_loss_weights_inplace(self.config["losses"], self.get_global_step())
+        #update_loss_weights_inplace(self.config["losses"], self.get_global_step())
 
         # calculate losses
         instance_losses = {}
+        #instance_losses["keypoint_loss"] = MSELoss(inputs, predictions)#batch[f"keypoints{TYPE}"][:, :, :2], coords.double())
 
-        if "color_L1" in self.config["losses"].keys():
-            instance_losses["color_L1"] = self.L1LossInstances(
-                predictions["image"], inputs["target"]
-            )
+        def heatmap_loss(inputs, predictions):
+            hm_loss = 0
+            for element in range(len(inputs)):
+                for idx in range(len(predictions[1])):
+                    hm_loss += torch.nn.functional.mse_loss(inputs[element, idx, :, :], predictions[element, idx, :, :])
+            return hm_loss
+        instance_losses["heatmap_loss"] = heatmap_loss(inputs, predictions)
 
-        if "masked_L1" in self.config["losses"].keys():
-            instance_losses["masked_L1"] = self.MaskedL1LossInstances(
-                predictions["image"],
-                inputs["target"],
-                inputs["forward_flow"],
-                inputs["backward_flow"],
-            )
 
-        if "color_L2" in self.config["losses"].keys():
-            instance_losses["color_L2"] = self.MSELossInstances(
-                predictions["image"], inputs["target"]
-            )
-
-        if "color_gradient" in self.config["losses"].keys():
-            instance_losses["color_gradient"] = self.L1LossInstances(
-                torch.abs(
-                    predictions["image"][..., 1:] - predictions["image"][..., :-1]
-                ),
-                torch.abs(inputs["target"][..., 1:] - inputs["target"][..., :-1]),
-            ) + self.L1LossInstances(
-                torch.abs(
-                    predictions["image"][..., 1:, :] - predictions["image"][..., :-1, :]
-                ),
-                torch.abs(inputs["target"][..., 1:, :] - inputs["target"][..., :-1, :]),
-            )
-
-        if "flow_smoothness" in self.config["losses"].keys():
-            instance_losses["flow_smoothness"] = self.L1LossInstances(
-                predictions["flow"][..., 1:], predictions["flow"][..., :-1]
-            ) + self.L1LossInstances(
-                predictions["flow"][..., 1:, :], predictions["flow"][..., :-1, :]
-            )
-
-        if "KL" in self.config["losses"].keys() and "q_means" in predictions:
-            instance_losses["KL"] = aggregate_kl_loss(
-                predictions["q_means"], predictions["p_means"]
-            )
-
-        if "perceptual" in self.config["losses"]:
-            instance_losses["perceptual"] = self.PerceptualLossInstances(
-                predictions["image"], inputs["target"]
-            )
 
         instance_losses["total"] = sum(
             [
-                self.config["losses"][key]["weight"] * instance_losses[key]
+                instance_losses[key]
                 for key in instance_losses.keys()
             ]
         )
@@ -160,116 +84,113 @@ class Iterator(TemplateIterator):
 
         return losses
 
-    def prepare_inputs_inplace(self, inputs):
-        before = time.time()
-
-        inputs["np"] = {
-            "image": inputs["images"][0]["image"],
-            "target": inputs["images"][1]["image"],
-            "flow": inputs["backward_flow"]
-            if self.config["reverse_flow_input"]
-            else inputs["forward_flow"],
-            "forward_flow": inputs["forward_flow"],
-            "backward_flow": inputs["backward_flow"],
-        }
-        inputs["pt"] = {key: np2pt(inputs["np"][key]) for key in inputs["np"]}
-
-        if retrieve(self.config, "debug_timing", default=False):
-            self.logger.info("prepare of data needed {} s".format(time.time() - before))
+    # def prepare_inputs_inplace(self, inputs):
+    #     before = time.time()
+    #
+    #     inputs["np"] = {
+    #         "image": inputs["input"],
+    #         "target": inputs["targets"],
+    #     }
+    #     inputs["pt"] = {key: self.np2pt(inputs["np"][key]) for key in inputs["np"]}
+    #
+    #     if retrieve(self.config, "debug_timing", default=False):
+    #         self.logger.info("Peperation time {} s".format(time.time() - before))
 
     def compute_model(self, model, inputs):
-        output = model(inputs["pt"])
-        predictions = model.warp(output, inputs["pt"])
+        output = model(inputs["targets"])
+        predictions = output
         return predictions
 
-    def prepare_logs(self, inputs, predictions, losses, model, granularity):
-        assert granularity in ["batch", "instances"]
-        losses = losses[granularity]
+    # def prepare_logs(self, inputs, predictions, losses, model, granularity):
+    #     assert granularity in ["batch", "instances"]
+    #     losses = losses[granularity]
+    #
+    #     # # prepare simplest benchmark_losses
+    #     # # copy input
+    #     # predictions_copy_input = {
+    #     #     "image": inputs["pt"]["image"],
+    #     #     "flow": inputs["pt"]["flow"],
+    #     # }
+    #     # losses_copy_input = self.criterion(inputs["pt"], predictions_copy_input)[
+    #     #     granularity
+    #     # ]
+    #     #
+    #     #
+    #     # # sample variational part if applicable
+    #     # if self.config["model"] == "AnimalPose.models.VUnet":
+    #     #     output_sample = model(inputs["pt"], mode="sample_appearance")
+    #     #     predictions_sample = model.warp(output_sample, inputs["pt"])
+    #     #     losses_sample = self.criterion(inputs["pt"], predictions_sample)[
+    #     #         granularity
+    #     #     ]
+    #     #     sample_images = {
+    #     #         "images_prediction_sample": self.pt2np(predictions_sample["image"]),
+    #     #     }
+    #     # else:
+    #     #     losses_sample = dict()
+    #     #     sample_images = dict()
+    #
+    #
+    #     #axis = (1, 2, 3) if granularity == "instances" else None
+    #
+    #
+    #     # mask and masked images
+    #     # if "masked_L1" in self.config["losses"]:
+    #     #     mask, masked_image, masked_target = self.MaskedL1LossInstances.get_masked(
+    #     #         inputs["pt"]["image"],
+    #     #         inputs["pt"]["target"],
+    #     #         inputs["pt"]["forward_flow"],
+    #     #         inputs["pt"]["backward_flow"],
+    #     #     )
+    #     #     mask_images = {
+    #     #         "mask": pt2np(mask),
+    #     #         "masked_input": pt2np(masked_image),
+    #     #         "masked_target": pt2np(masked_target),
+    #     #     }
+    #     # else:
+    #     #     mask_images = dict()
+    #
+    #     #concatenate logs
+    #     logs = {
+    #         "images": {
+    #             "images_input": inputs["inputs"],
+    #             "images_target": inputs["targets"],
+    #             "images_prediction": self.pt2np(predictions),
+    #             #**sample_images,
+    #             #**mask_images,
+    #         },
+    #         "scalars": {
+    #             **{"losses/_prediction/" + k: v for k, v in losses.items()},
+    #             #**{"losses/copy_input/" + k: v for k, v in losses_copy_input.items()},
+    #             #**{"losses/sample/" + k: v for k, v in losses_sample.items()},
+    #         },
+    #     }
+    #
+    #     # convert to numpy
+    #     def conditional_convert2np(log_item):
+    #         if isinstance(log_item, torch.Tensor):
+    #             log_item = log_item.detach().cpu().numpy()
+    #         return log_item
+    #
+    #     walk(logs, conditional_convert2np, inplace=True)
+    #
+    #     return logs
 
-        # prepare simplest benchmark_losses
-        # copy input
-        predictions_copy_input = {
-            "image": inputs["pt"]["image"],
-            "flow": inputs["pt"]["flow"],
-        }
-        losses_copy_input = self.criterion(inputs["pt"], predictions_copy_input)[
-            granularity
-        ]
-
-
-        # sample variational part if applicable
-        if self.config["model"] == "AnimalPose.models.VUnet":
-            output_sample = model(inputs["pt"], mode="sample_appearance")
-            predictions_sample = model.warp(output_sample, inputs["pt"])
-            losses_sample = self.criterion(inputs["pt"], predictions_sample)[
-                granularity
-            ]
-            sample_images = {
-                "images_prediction_sample": pt2np(predictions_sample["image"]),
-            }
-        else:
-            losses_sample = dict()
-            sample_images = dict()
-
-
-        axis = (1, 2, 3) if granularity == "instances" else None
-
-
-        # mask and masked images
-        if "masked_L1" in self.config["losses"]:
-            mask, masked_image, masked_target = self.MaskedL1LossInstances.get_masked(
-                inputs["pt"]["image"],
-                inputs["pt"]["target"],
-                inputs["pt"]["forward_flow"],
-                inputs["pt"]["backward_flow"],
-            )
-            mask_images = {
-                "mask": pt2np(mask),
-                "masked_input": pt2np(masked_image),
-                "masked_target": pt2np(masked_target),
-            }
-        else:
-            mask_images = dict()
-
-        # concatenate logs
-        logs = {
-            "images": {
-                "images_input": inputs["np"]["image"],
-                "images_target": inputs["np"]["target"],
-                "images_prediction": pt2np(predictions["image"]),
-                **sample_images,
-                **mask_images,
-            },
-            "scalars": {
-                **{"losses/_prediction/" + k: v for k, v in losses.items()},
-                **{"losses/copy_input/" + k: v for k, v in losses_copy_input.items()},
-                **{"losses/sample/" + k: v for k, v in losses_sample.items()},
-            },
-        }
-
-        # convert to numpy
-        def conditional_convert2np(log_item):
-            if isinstance(log_item, torch.Tensor):
-                log_item = log_item.detach().cpu().numpy()
-            return log_item
-
-        walk(logs, conditional_convert2np, inplace=True)
-
-        return logs
-
-    def step_op(self, model, **inputs):
+    def step_op(self, model, **kwargs):
         # set model to train / eval mode
-        is_train = self.get_split() == "train"
-        model.train(is_train)
+        model.train()
 
         # prepare inputs
-        self.prepare_inputs_inplace(inputs)
+        # self.prepare_inputs_inplace(kwargs)
+        # TODO need (batch_size, channel, width, height)
+        inp = self.np2pt(kwargs["inp"].reshape(-1, self.config["n_channels"],
+                                                      kwargs["inp"].shape[1],
+                                                      kwargs["inp"].shape[2]))
 
         # compute model
-        predictions = self.compute_model(model, inputs)
-
+        outputs = model(inp)
         # compute loss
-        losses = self.criterion(inputs["pt"], predictions)
+        losses = self.criterion(torch.from_numpy(kwargs["targets"]).cpu(), outputs.cpu())
 
         def train_op():
             before = time.time()
@@ -280,28 +201,20 @@ class Iterator(TemplateIterator):
                 self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
-            with torch.no_grad():
-                logs = self.prepare_logs(inputs, predictions, losses, model, "batch")
-
-            # log to tensorboard
-            if self.config["integrations"]["tensorboardX"]["active"]:
-                if self.get_global_step() == 0 and is_train:
-                    # save model
-                    self.tensorboardX_writer.add_graph(model, inputs["pt"])
-                    self.logger.info("Added model graph to tensorboard")
-
-            return logs
+            return {
+                "images": {"inputs": inp.reshape(-1, 128, 128, 1).cpu().numpy()},
+                "scalars": {
+                    "heatmap_loss": losses["batch"]["heatmap_loss"],
+                    "loss": losses["batch"]["total"],
+                },
+            }
 
         def eval_op():
             with torch.no_grad():
-                logs = self.prepare_logs(
-                    inputs, predictions, losses, model, "instances"
-                )
-
-            return {
-                **logs["images"],
-                "labels": {k: v for k, v in logs["scalars"].items()},
-            }
+                return {
+                    "outputs": np.array(outputs.detach().numpy()),
+                    "labels": {"loss": np.array(losses["batch"]["total"].detach().numpy())},
+                }
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
 

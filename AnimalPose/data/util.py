@@ -3,13 +3,82 @@ from typing import Type
 
 import cv2
 import numpy as np
+import skimage
+import skimage.transform
 from skimage.draw import circle, line, line_aa
 
 #JointModel: Type[JointModel] = namedtuple("JointModel","body right_lines left_lines rshoulder lshoulder headup kps_to_use kp_to_joint")
 
+class Rescale(object):
+    """Rescale the image in a sample to a given size.
+
+    Args:
+        output_size (tuple or int): Desired output size. If tuple, output is
+            matched to output_size. If int, smaller of image edges is matched
+            to output_size keeping aspect ratio the same.
+    """
+
+    def __init__(self, output_size):
+        assert isinstance(output_size, (int, tuple))
+        self.output_size = output_size
+
+    def __call__(self, image, keypoints):
+
+        h, w = image.shape[:2]
+        if isinstance(self.output_size, int):
+            if h > w:
+                new_h, new_w = self.output_size * h / w, self.output_size
+            else:
+                new_h, new_w = self.output_size, self.output_size * w / h
+        else:
+            new_h, new_w = self.output_size
+
+        new_h, new_w = int(new_h), int(new_w)
+
+        img = skimage.transform.resize(image, (new_h, new_w))
+        # h and w are swapped for keypoints because for images,
+        # x and y axes are axis 1 and 0 respectively
+        keypoints = keypoints * [new_w / w, new_h / h]
+        #bbox = bbox * [new_w / w, new_h / h, new_w / w, new_h / h]
+
+        return img, keypoints
 
 
-def make_joint_img(img_shape, joints,joint_model:JointModel, color_channel=None):
+
+def gaussian_k(x0, y0, sigma, width, height):
+    """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
+    """
+    x = np.arange(0, width, 1, float)  ## (width,)
+    y = np.arange(0, height, 1, float)[:, np.newaxis]  ## (height,1)
+    return np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+
+def make_heatmaps(image, keypoints, sigma=2):
+    hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)
+    for idx in range(0, len(keypoints)):
+        if not np.array_equal(keypoints[idx], [0, 0]):
+
+            hm[idx,:, :] = gaussian_k(keypoints[idx][0],
+                                        keypoints[idx][1],
+                                        sigma, image.shape[1], image.shape[0])
+        else:
+            hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
+    return hm.reshape(-1, image.shape[0], image.shape[1])
+
+def make_stickanimal(image, keypoints, sigma=2):
+    hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)
+    for idx in range(0, len(keypoints)):
+        if not np.array_equal(keypoints[idx], [0, 0]):
+
+            hm[idx,:, :] = gaussian_k(keypoints[idx][0],
+                                        keypoints[idx][1],
+                                        sigma, image.shape[1], image.shape[0])
+        else:
+            hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
+    return hm
+
+
+
+def make_joint_img(img_shape, joints,JointModel, color_channel=None):
     # channels are opencv so g, b, r
     scale_factor = img_shape[1] / 128
     thickness = int(3 * scale_factor)

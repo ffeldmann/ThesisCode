@@ -1,0 +1,30 @@
+iterator: AnimalPose.train.Iterator
+model: AnimalPose.models.UNet
+batch_size: 8
+num_steps: 500001
+lr: 0.0001
+
+cuda: true  # False -> use GPU
+
+#Training methods
+#pretrained_checkpoint:
+
+# Losses
+losses:
+  MSELossInstances:
+  L2: true # TODO
+  L2_kpt: true # TODO
+
+
+# logging
+integrations:
+  git:
+    true
+  tensorboardX:
+    active: true
+#  wandb:
+#    active: false
+#    handlers:
+#      - scalars
+
+
