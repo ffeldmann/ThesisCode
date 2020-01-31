@@ -3,13 +3,15 @@ import numpy as np
 import skimage.color
 from edflow.data.believers.meta import MetaDataset
 from AnimalPose.data.util import make_heatmaps, Rescale
-#from edflow.data.believers.meta_view import MetaViewDataset
+from edflow.data.agnostics.subdataset import SubDataset
+from edflow.data.dataset_mixin import DatasetMixin
 
 
 class SingleCats(MetaDataset):
     def __init__(self, config):
         super().__init__(config["dataroot"])
         self.config = config
+        #self.append_labels = False
 
         if "rescale_to" in self.config.keys():
             self.rescale = Rescale(self.config["rescale_to"])
@@ -64,21 +66,44 @@ class SingleCats(MetaDataset):
         ]
 
 
-class SingleCatsUNet(SingleCats):
-    def __init__(self, config):
-        super().__init__(config)
+class SingleCatsUNet(DatasetMixin):
+    def __init__(self, config, mode="all"):
+        #super().__init__(config)
+        assert mode in ["train", "validation", "all"], f"Should be train, validatiopn or all, got {mode}"
+        self.sc = SingleCats(config)
+        self.train = int(0.8 * len(self.sc))
+        self.test = 1 - self.train
+
+        if mode != "all":
+            split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train+1, len(self.sc))
+            self.data = SubDataset(self.sc, split_indices)
+        else:
+            self.data = self.sc
 
     def get_example(self, idx):
         example = super().get_example(idx)
-        image, keypoints = self.rescale(example["frames"](), self.labels["kps"][idx])
-        if "as_grey" in self.config.keys():
+        image, keypoints = self.data.data.rescale(example["frames"](), self.labels["kps"][idx])
+        if "as_grey" in self.data.data.config.keys():
             example["inp"] = skimage.color.rgb2gray(image)
-            assert(self.config["n_channels"] == 1), ("n_channels should be 1, got {}".format(self.config["n_channels"]))
+            assert(self.data.data.config["n_channels"] == 1), ("n_channels should be 1, got {}".format(self.data.data.config["n_channels"]))
         else:
             example["inp"] = image
         example["targets"] = make_heatmaps(example["inp"], keypoints)
-        example.pop("frames")
+        example.pop("frames") # TODO
         return example
+
+
+
+class SingleCatsUNet_Train(SingleCatsUNet):
+    def __init__(self, config):
+        super().__init__(config, mode="train")
+
+
+class SingleCatsUNet_Validation(SingleCatsUNet):
+    def __init__(self, config):
+        super().__init__(config, mode="validation")
+
+
 
 class SingleCatsDLC(SingleCats):
     def __init__(self, config):
@@ -89,10 +114,33 @@ class SingleCatsDLC(SingleCats):
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+    import sys
 
-    cats = SingleCatsUNet({"dataroot": '/export/home/ffeldman/Masterarbeit/data'})
+    def info(type, value, tb):
+        if hasattr(sys, 'ps1') or not sys.stderr.isatty():
+            # we are in interactive mode or we don't have a tty-like
+            # device, so we call the default hook
+            sys.__excepthook__(type, value, tb)
+        else:
+            import traceback, pdb
+            # we are NOT in interactive mode, print the exception...
+            traceback.print_exception(type, value, tb)
+            print
+            # ...then start the debugger in post-mortem mode.
+            pdb.pm()
+
+
+    sys.excepthook = info
+
+    DATAROOT = {"dataroot": '/export/home/ffeldman/Masterarbeit/data'}
+
+    catsall = SingleCatsUNet(DATAROOT)
+    #cats = SingleCatsUNet_Train(DATAROOT)
+    cats = SingleCatsUNet_Validation(DATAROOT)
     ex = cats.get_example(3)
     for hm in ex["targets"]:
         print(hm.shape)
         plt.imshow(hm)
         plt.show()
+
+

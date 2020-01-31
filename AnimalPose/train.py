@@ -1,6 +1,6 @@
 import torch
 import time
-
+import pdb
 import numpy as np
 import torch
 import torch.optim as optim
@@ -52,7 +52,7 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, inputs, predictions):
+    def criterion(self, inputs, predictions, gt_coords):
         # update kl weights
         #update_loss_weights_inplace(self.config["losses"], self.get_global_step())
 
@@ -68,8 +68,44 @@ class Iterator(TemplateIterator):
             return hm_loss
         instance_losses["heatmap_loss"] = heatmap_loss(inputs, predictions)
 
+        def keypoint_loss(inputs, predictions, gt_coords):
+            crit = torch.nn.MSELoss()
 
+            def get_max_preds(heatmaps):
+                '''
+                From: https://github.com/microsoft/human-pose-estimation.pytorch/blob/master/lib/core/inference.py
+                get predictions from score maps
+                heatmaps: numpy.ndarray([batch_size, num_joints, height, width])
+                '''
+                assert isinstance(heatmaps, np.ndarray), \
+                    'batch_heatmaps should be numpy.ndarray'
+                assert heatmaps.ndim == 4, 'batch_images should be 4-ndim'
 
+                batch_size = heatmaps.shape[0]
+                num_joints = heatmaps.shape[1]
+                width = heatmaps.shape[3]
+                heatmaps_reshaped = heatmaps.reshape((batch_size, num_joints, -1))
+                idx = np.argmax(heatmaps_reshaped, 2)
+                maxvals = np.amax(heatmaps_reshaped, 2)
+
+                maxvals = maxvals.reshape((batch_size, num_joints, 1))
+                idx = idx.reshape((batch_size, num_joints, 1))
+
+                preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
+
+                preds[:, :, 0] = (preds[:, :, 0]) % width
+                preds[:, :, 1] = np.floor((preds[:, :, 1]) / width)
+
+                pred_mask = np.tile(np.greater(maxvals, 0.0), (1, 1, 2))
+                pred_mask = pred_mask.astype(np.float32)
+
+                preds *= pred_mask
+                return preds, maxvals
+            coords, maxvals = get_max_preds(inputs.numpy())
+
+            return crit(torch.from_numpy(coords), torch.from_numpy(gt_coords))
+
+        instance_losses["keypoint_loss"] = keypoint_loss(inputs, predictions, gt_coords)
         instance_losses["total"] = sum(
             [
                 instance_losses[key]
@@ -96,10 +132,10 @@ class Iterator(TemplateIterator):
     #     if retrieve(self.config, "debug_timing", default=False):
     #         self.logger.info("Peperation time {} s".format(time.time() - before))
 
-    def compute_model(self, model, inputs):
-        output = model(inputs["targets"])
-        predictions = output
-        return predictions
+    #def compute_model(self, model, inputs):
+    #    output = model(inputs["targets"])
+    #    predictions = output
+    #    return predictions
 
     # def prepare_logs(self, inputs, predictions, losses, model, granularity):
     #     assert granularity in ["batch", "instances"]
@@ -182,15 +218,17 @@ class Iterator(TemplateIterator):
 
         # prepare inputs
         # self.prepare_inputs_inplace(kwargs)
+
         # TODO need (batch_size, channel, width, height)
-        inp = self.np2pt(kwargs["inp"].reshape(-1, self.config["n_channels"],
+        inputs = self.np2pt(kwargs["inp"].reshape(-1, self.config["n_channels"],
                                                       kwargs["inp"].shape[1],
                                                       kwargs["inp"].shape[2]))
 
         # compute model
-        outputs = model(inp)
+        outputs = model(inputs)
         # compute loss
-        losses = self.criterion(torch.from_numpy(kwargs["targets"]).cpu(), outputs.cpu())
+        # Target heatmaps, predicted heatmaps, gt_coords
+        losses = self.criterion(torch.from_numpy(kwargs["targets"]), outputs.cpu(), kwargs["labels_"]["kps"])
 
         def train_op():
             before = time.time()
@@ -201,18 +239,59 @@ class Iterator(TemplateIterator):
                 self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
-            return {
-                "images": {"inputs": inp.reshape(-1, 128, 128, 1).cpu().numpy()},
+
+            # def create_plot():
+            #     import matplotlib.pyplot as plt
+            #
+            #     fig = plt.figure(figsize=(10, 10))
+            #     fig = plt.figure(figsize=(10, 10))
+            #     fig = plt.figure(figsize=(10, 10))
+            #     for idx in range(4):
+            #         fig.add_subplot(2, 2, idx + 1)
+            #         fig.suptitle('Blue: GT, Red: Predicted')
+            #         plt.imshow(imgs[idx].cpu().numpy().transpose(1, 2, 0))
+            #         for kpt in range(0, len(batch[f"keypoints{TYPE}"][idx][:, 0])):
+            #             plt.plot([np.array(batch[f"keypoints{TYPE}"][idx][:, :2][kpt][0]),
+            #                       np.array(coords[idx][kpt][0])],
+            #                      [np.array(batch[f"keypoints{TYPE}"][idx][:, :2][kpt][1]),
+            #                       np.array(coords[idx][kpt][1])],
+            #                      'bx-', alpha=0.3)
+            #         plt.scatter(batch[f"keypoints{TYPE}"][idx][:, 0],
+            #                     batch[f"keypoints{TYPE}"][idx][:, 1],
+            #                     c="blue")
+            #         plt.scatter(coords[idx][:, 0],
+            #                     coords[idx][:, 1],
+            #                     c="red")
+
+
+
+
+            logs = {
+                "images": {
+                    "image_input": inputs.reshape(-1, 128, 128, 1).cpu().numpy(),
+                    #"outputs": None,
+
+                },
                 "scalars": {
+                    "keypoint_loss": losses["batch"]["keypoint_loss"],
                     "heatmap_loss": losses["batch"]["heatmap_loss"],
                     "loss": losses["batch"]["total"],
                 },
             }
 
+            # log to tensorboard
+            #if self.config["integrations"]["tensorboardX"]["active"]:
+            #    # save model
+            #    self.tensorboardX_writer.add_graph(model)
+            #    self.logger.info("Added model graph to tensorboard")
+
+
+            return logs
+
         def eval_op():
             with torch.no_grad():
                 return {
-                    "outputs": np.array(outputs.detach().numpy()),
+                    "outputs": np.array(outputs.cpu().detach().numpy()),
                     "labels": {"loss": np.array(losses["batch"]["total"].detach().numpy())},
                 }
 

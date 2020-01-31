@@ -10,7 +10,7 @@ def test_meta_dataset():
         "-b",
         "AnimalPose/configs/MinimalNet.yaml",
         "AnimalPose/configs/Human36MFramesFlowMeta.yaml",
-        "AnimalPose/configs/train.yaml",
+        "AnimalPose/configs/train_unet.yaml",
         "tests/examples/config.yaml",
         "--num_steps",
         "11",
@@ -24,11 +24,11 @@ def test_meta_dataset():
 
 #     """Just make sure example runs without errors."""
 #     return_value = os.system(
-#         "edflow -b AnimalPose/configs/MinimalNet.yaml AnimalPose/configs/Human36MFramesFlow.yaml AnimalPose/configs/train.yaml tests/examples/config.yaml -n meta --num_steps 11 --edeval_update_wandb_summary False -t"
+#         "edflow -b AnimalPose/configs/MinimalNet.yaml AnimalPose/configs/Human36MFramesFlow.yaml AnimalPose/configs/train_unet.yaml tests/examples/config.yaml -n meta --num_steps 11 --edeval_update_wandb_summary False -t"
 #     )
 #     assert return_value == 0, return_value
 
 
 if __name__ == "__main__":
-    test_origina_dataset()
+    test_original_dataset()
     test_meta_dataset()
