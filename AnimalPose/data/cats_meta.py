@@ -75,6 +75,7 @@ class SingleCatsUNet(DatasetMixin):
         self.test = 1 - self.train
 
         if mode != "all":
+            # TODO Better split e.g. split per video!
             split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train+1, len(self.sc))
             self.data = SubDataset(self.sc, split_indices)
         else:

@@ -2,10 +2,6 @@ import torch
 from collections import namedtuple
 from torchvision.models import vgg19
 from torchvision import transforms
-from absl import flags
-
-
-FLAGS = flags.FLAGS
 
 
 # def update_loss_weights_inplace(loss_config, step):

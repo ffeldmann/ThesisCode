@@ -263,9 +263,9 @@ class Iterator(TemplateIterator):
             #                     coords[idx][:, 1],
             #                     c="red")
 
+            import matplotlib.pyplot as plt
 
-
-
+            fig = plt.figure(figsize=(10,10))
             logs = {
                 "images": {
                     "image_input": inputs.reshape(-1, 128, 128, 1).cpu().numpy(),
@@ -292,46 +292,47 @@ class Iterator(TemplateIterator):
             with torch.no_grad():
                 return {
                     "outputs": np.array(outputs.cpu().detach().numpy()),
-                    "labels": {"loss": np.array(losses["batch"]["total"].detach().numpy())},
+                    #TODO in which shape is the outputs necessary for evaluation?
+                     #"labels": {k: [v.cpu().detach().numpy()] for k, v in losses["batch"].items()},
                 }
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
 
-    @property
-    def callbacks(self):
-        return {"eval_op": {"cb": eval_callback}}
-
-
-def eval_callback(root, data_in, data_out, config):
-    logger = get_logger("eval_callback")
-
-    prefix = "edeval/target_step_{}/".format(config["target_frame_step"])
-
-    losses = {
-        prefix + k.replace("--", "/"): v.mean()
-        for k, v in data_out.labels.items()
-        if "losses--_prediction" in k
-    }
-
-    for k, v in losses.items():
-        logger.info("{}: {}".format(k, v))
-
-    if (
-        config.get("edeval_update_wandb_summary", True)
-        and config["integrations"]["wandb"]["active"]
-    ):
-        data_out.data.data.root
-        import wandb
-
-        api = wandb.Api()
-
-        run_name = data_out.data.data.root.split("/eval/")[0]
-        this_run = None
-        runs = api.runs("hperrot/flowframegen")
-        for run in runs:
-            if run.name == run_name:
-                this_run = run
-        # if this_run is not None:
-        #     this_run.summary(losses)
-
-    return losses
+#     @property
+#     def callbacks(self):
+#         return {"eval_op": {"cb": eval_callback}}
+#
+#
+# def eval_callback(root, data_in, data_out, config):
+#     logger = get_logger("eval_callback")
+#
+#     prefix = "edeval/target_step_{}/".format(config["target_frame_step"])
+#
+#     losses = {
+#         prefix + k.replace("--", "/"): v.mean()
+#         for k, v in data_out.labels.items()
+#         if "losses--_prediction" in k
+#     }
+#
+#     for k, v in losses.items():
+#         logger.info("{}: {}".format(k, v))
+#
+#     if (
+#         config.get("edeval_update_wandb_summary", True)
+#         and config["integrations"]["wandb"]["active"]
+#     ):
+#         data_out.data.data.root
+#         import wandb
+#
+#         api = wandb.Api()
+#
+#         run_name = data_out.data.data.root.split("/eval/")[0]
+#         this_run = None
+#         runs = api.runs("hperrot/flowframegen")
+#         for run in runs:
+#             if run.name == run_name:
+#                 this_run = run
+#         # if this_run is not None:
+#         #     this_run.summary(losses)
+#
+#     return losses

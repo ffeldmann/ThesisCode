@@ -1,0 +1,12 @@
+name: AnimalPose
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - opencv
+  - scikit-image
+  - pytorch
+  - torchvision
+#  - pip:
+#    - Flask-Testing

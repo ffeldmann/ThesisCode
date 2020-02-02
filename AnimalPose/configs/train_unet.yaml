@@ -20,7 +20,7 @@ losses:
 integrations:
   git:
     true
-  tensorboardX:
+  tensorboard:
     active: true
 #  wandb:
 #    active: false

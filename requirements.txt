@@ -1,3 +1,10 @@
+opencv
+scikit-image
+pytorch
+torchvision
+pytest
+tensorboard
+
 absl-py==0.8.1
 altair==4.0.0
 appdirs==1.4.3

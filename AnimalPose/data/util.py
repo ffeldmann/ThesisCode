@@ -52,7 +52,7 @@ def gaussian_k(x0, y0, sigma, width, height):
     y = np.arange(0, height, 1, float)[:, np.newaxis]  ## (height,1)
     return np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
 
-def make_heatmaps(image, keypoints, sigma=2):
+def make_heatmaps(image, keypoints, sigma=0.5):
     hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)
     for idx in range(0, len(keypoints)):
         if not np.array_equal(keypoints[idx], [0, 0]):
@@ -64,7 +64,7 @@ def make_heatmaps(image, keypoints, sigma=2):
             hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
     return hm.reshape(-1, image.shape[0], image.shape[1])
 
-def make_stickanimal(image, keypoints, sigma=2):
+def make_stickanimal(image, keypoints, sigma=0.8):
     hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)
     for idx in range(0, len(keypoints)):
         if not np.array_equal(keypoints[idx], [0, 0]):
