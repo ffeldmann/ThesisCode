@@ -93,8 +93,6 @@ class SingleCatsUNet(DatasetMixin):
         example.pop("frames") # TODO
         return example
 
-
-
 class SingleCatsUNet_Train(SingleCatsUNet):
     def __init__(self, config):
         super().__init__(config, mode="train")

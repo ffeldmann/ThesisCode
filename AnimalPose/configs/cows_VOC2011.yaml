@@ -1,0 +1,8 @@
+dataset: AnimalPose.data.AnimalVOC2011
+#validation_dataset: AnimalPose.data.SingleCatsUNet_Validation
+dataroot: '/export/home/ffeldman/Masterarbeit/data/VOC2011/cows_meta'
+n_classes: 19
+n_channels: 1 # rgb or grayscale
+bilinear: true
+resize_to: 256, 256
+as_grey: True
