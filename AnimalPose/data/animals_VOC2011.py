@@ -44,6 +44,48 @@ class AnimalVOC2011(MetaDataset):
         ]
 
 
+class AnimalVOC2011_Abstract(DatasetMixin):
+    def __init__(self, config, mode="all"):
+        assert mode in ["train", "validation", "all"], f"Should be train, validatiopn or all, got {mode}"
+        self.sc = AnimalVOC2011(config)
+        self.train = int(0.8 * len(self.sc))
+        self.test = 1 - self.train
+
+        if mode != "all":
+            split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train+1, len(self.sc))
+            self.data = SubDataset(self.sc, split_indices)
+        else:
+            self.data = self.sc
+
+    def get_example(self, idx):
+        example = super().get_example(idx)
+        # (H, W, C)
+        image, keypoints = self.data.data.rescale(example["frames"](), self.labels["kps"][idx])
+        height = image.shape[0]
+        width  = image.shape[1]
+        if "as_grey" in self.data.data.config.keys():
+            if self.data.data.config["as_grey"]:
+                example["inp"] = skimage.color.rgb2gray(image).reshape(height, width, 1)
+                assert(self.data.data.config["n_channels"] == 1), ("n_channels should be 1, got {}".format(self.data.data.config["n_channels"]))
+            else:
+                example["inp"] = image
+        else:
+            example["inp"] = image
+        example["kps"] = keypoints
+        example["targets"] = make_heatmaps(example["inp"], keypoints)
+        example.pop("frames") # TODO
+        return example
+
+class AnimalVOC2011_UNet_Train(AnimalVOC2011_Abstract):
+    def __init__(self, config):
+        super().__init__(config, mode="train")
+
+
+class AnimalVOC2011_UNet_Validation(AnimalVOC2011_Abstract):
+    def __init__(self, config):
+        super().__init__(config, mode="validation")
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import sys

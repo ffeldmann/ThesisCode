@@ -1,6 +1,4 @@
-import os
-from typing import Type
-
+import torch
 import cv2
 import numpy as np
 import skimage
@@ -43,8 +41,6 @@ class Rescale(object):
 
         return img, keypoints
 
-
-
 def gaussian_k(x0, y0, sigma, width, height):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
     """
@@ -75,8 +71,6 @@ def make_stickanimal(image, keypoints, sigma=0.8):
         else:
             hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
     return hm
-
-
 
 def make_joint_img(img_shape, joints,JointModel, color_channel=None):
     # channels are opencv so g, b, r
@@ -180,8 +174,6 @@ def make_joint_img(img_shape, joints,JointModel, color_channel=None):
         img = np.mean(img, axis=-1)[:, :, None]
     # img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
     return img
-
-
 
 def add_joints_to_img(img, kps, joints, color_kps=[[255, 0, 0]], color_joints=[[255, 0, 0]]):
     # params
