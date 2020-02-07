@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from collections import namedtuple
 from torchvision.models import vgg19
 from torchvision import transforms
@@ -21,11 +22,54 @@ from torchvision import transforms
 #                     ramp_progress * ramp_diff + weight_dict["start_ramp_val"]
 #                 )
 
+def heatmap_loss(targets, predictions):
+    hm_loss = 0
+    for element in range(len(targets)):
+        for idx in range(len(predictions[1])):
+            hm_loss += torch.nn.functional.mse_loss(torch.from_numpy(targets[element, idx, :, :]), predictions[element, idx, :, :])
+    return hm_loss
+
+
+def heatmaps_to_coords(heatmaps):
+    '''
+    From: https://github.com/microsoft/human-pose-estimation.pytorch/blob/master/lib/core/inference.py
+    get predictions from score maps
+    heatmaps: numpy.ndarray([batch_size, num_joints, height, width])
+    '''
+    assert isinstance(heatmaps, np.ndarray), \
+        'batch_heatmaps should be numpy.ndarray'
+    assert heatmaps.ndim == 4, 'batch_images should be 4-ndim'
+
+    batch_size = heatmaps.shape[0]
+    num_joints = heatmaps.shape[1]
+    width = heatmaps.shape[3]
+    heatmaps_reshaped = heatmaps.reshape((batch_size, num_joints, -1))
+    idx = np.argmax(heatmaps_reshaped, 2)
+    maxvals = np.amax(heatmaps_reshaped, 2)
+
+    maxvals = maxvals.reshape((batch_size, num_joints, 1))
+    idx = idx.reshape((batch_size, num_joints, 1))
+
+    preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
+
+    preds[:, :, 0] = (preds[:, :, 0]) % width
+    preds[:, :, 1] = np.floor((preds[:, :, 1]) / width)
+
+    pred_mask = np.tile(np.greater(maxvals, 0.0), (1, 1, 2))
+    pred_mask = pred_mask.astype(np.float32)
+
+    preds *= pred_mask
+    return preds, maxvals
+
+def keypoint_loss(predictions, gt_coords):
+    crit = torch.nn.MSELoss()
+    coords, _ = heatmaps_to_coords(predictions.cpu().detach().numpy())
+    return crit(torch.from_numpy(coords), torch.from_numpy(gt_coords))
+
 
 class MSELossInstances(torch.nn.MSELoss):
     """MSELoss, which reduces to instances of the batch
     """
-
     def __init__(self):
         super().__init__(reduction="none")
 

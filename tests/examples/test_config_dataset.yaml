@@ -1,0 +1,8 @@
+dataset: AnimalPose.tests.example
+validation_dataset: AnimalPose.tests.example
+dataroot: '/export/home/ffeldman/Masterarbeit/data' # TODO
+n_classes: 19 # rgb or grayscale
+n_channels: 1
+bilinear: true
+resize_to: 256, 256
+as_grey: True
