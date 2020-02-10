@@ -41,7 +41,7 @@ class Rescale(object):
 
         return img, keypoints
 
-def gaussian_k(x0, y0, sigma, width, height):
+def gaussian_k(x0, y0, sigma, height, width):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
     """
     x = np.arange(0, width, 1, float)  ## (width,)
@@ -55,10 +55,10 @@ def make_heatmaps(image, keypoints, sigma=0.5):
 
             hm[idx,:, :] = gaussian_k(keypoints[idx][0],
                                         keypoints[idx][1],
-                                        sigma, image.shape[1], image.shape[0])
+                                        sigma, image.shape[0], image.shape[1])
         else:
             hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
-    return hm.reshape(-1, image.shape[0], image.shape[1])
+    return hm
 
 def make_stickanimal(image, keypoints, sigma=0.8):
     hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)

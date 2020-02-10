@@ -4,5 +4,5 @@ dataroot: 'VOC2011/sheeps_meta'
 n_classes: 20
 n_channels: 1 # rgb or grayscale
 bilinear: true
-resize_to: 256, 256
+resize_to: 96, 96
 as_grey: True

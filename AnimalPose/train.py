@@ -58,7 +58,6 @@ class Iterator(TemplateIterator):
 
         # reduce to batch granularity
         batch_losses = {k: v.mean() for k, v in instance_losses.items()}
-
         losses = dict(instances=instance_losses, batch=batch_losses)
         return losses
 
@@ -100,16 +99,14 @@ class Iterator(TemplateIterator):
 
                 },
                 "scalars": {
-
                     "loss": losses["batch"]["total"],
                 },
                 "figures": {
-                    "fig1": plot_input_target_keypoints(torch2numpy(inputs).transpose(0,2,3,1), # get BHWC
+                    "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0,2,3,1), # get BHWC
                                                         torch2numpy(predictions),# stay BCHW
                                                         kwargs["kps"]),
                 }
             }
-
             if self.config["losses"]["L2"]:
                 logs["scalars"]["heatmap_loss"] = losses["batch"]["heatmap_loss"]
             if self.config["losses"]["L2_kpt"]:
