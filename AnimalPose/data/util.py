@@ -46,7 +46,7 @@ def gaussian_k(x0, y0, sigma, width, height):
     """
     x = np.arange(0, width, 1, float)  ## (width,)
     y = np.arange(0, height, 1, float)[:, np.newaxis]  ## (height,1)
-    return np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+    return np.exp(-((x - int(x0)) ** 2 + (y - int(y0)) ** 2) / (2 * sigma ** 2))
 
 def make_heatmaps(image, keypoints, sigma=0.5):
     hm = np.zeros((len(keypoints), image.shape[0], image.shape[1]),  dtype=np.float32)

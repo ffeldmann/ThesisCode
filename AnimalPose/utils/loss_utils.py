@@ -24,10 +24,12 @@ from torchvision import transforms
 
 def heatmap_loss(targets, predictions):
     hm_loss = 0
-    for element in range(len(targets)):
-        for idx in range(len(predictions[1])):
-            hm_loss += torch.nn.functional.mse_loss(torch.from_numpy(targets[element, idx, :, :]), predictions[element, idx, :, :])
-    return hm_loss
+    crit = torch.nn.MSELoss()
+    hm_mse = crit(torch.from_numpy(targets), predictions)
+    #for element in range(len(targets)):
+    #    for idx in range(len(predictions[1])):
+    #        hm_loss += torch.nn.functional.mse_loss(torch.from_numpy(targets[element, idx, :, :]), predictions[element, idx, :, :])
+    return hm_mse
 
 
 def heatmaps_to_coords(heatmaps):
