@@ -4,20 +4,19 @@ from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
 
-from AnimalPose.data.util import make_heatmaps, Rescale
+from AnimalPose.data.util import make_heatmaps, Rescale, crop
 
 
 class AnimalVOC2011(MetaDataset):
     def __init__(self, config):
         super().__init__(config["dataroot"])
         self.config = config
-
+        self.crop = crop
         if "rescale_to" in self.config.keys():
             self.rescale = Rescale(self.config["rescale_to"])
         else:
             # Scaling to default size 128
             self.rescale = Rescale((128, 128))
-
         self.parts = {
             "L_Eye": 0,
             "R_Eye": 1,
@@ -60,8 +59,13 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
     def get_example(self, idx):
         example = super().get_example(idx)
+        image, keypoints = example["frames"](), self.labels["kps"][idx]
+        if "crop" in self.data.data.config.keys():
+            if self.data.data.config["crop"]:
+                image, keypoints = crop(image, keypoints, self.labels["bboxes"][idx])
         # (H, W, C)
-        image, keypoints = self.data.data.rescale(example["frames"](), self.labels["kps"][idx])
+        image, keypoints = self.data.data.rescale(image, keypoints)
+
         height = image.shape[0]
         width  = image.shape[1]
         if "as_grey" in self.data.data.config.keys():

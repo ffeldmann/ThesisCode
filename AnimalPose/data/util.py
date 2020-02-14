@@ -42,6 +42,28 @@ class Rescale(object):
         return img, keypoints
 
 
+def crop(image, keypoints, bbox):
+    """
+
+    Args:
+        image:
+        keypoints:
+        bbox:
+
+    Returns:
+
+    """
+
+    #bbox = np.floor(bbox).astype(int)
+    img = image[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2], :]
+    # First subtract the bounding box x and y from the coordinates of the keypoints
+    keypoints = np.subtract(np.array(keypoints), np.array([bbox[0], bbox[1]]))
+    # Set the keypoints which were zero back to zero
+
+    keypoints[keypoints[:, 1] <= 0] = np.array([0, 0])
+    return img, keypoints
+
+
 def gaussian_k(x0, y0, sigma, height, width):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
     """
