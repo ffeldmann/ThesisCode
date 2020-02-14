@@ -18,8 +18,8 @@ def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords):
     fig = plt.figure(figsize=(10, 10))
     # heatmaps_to_coords needs [batch_size, num_joints, height, width]
     coords, _ = heatmaps_to_coords(targets)
-    for idx in range(4):
-        fig.add_subplot(2, 2, idx + 1)
+    for idx in range(8):
+        fig.add_subplot(4, 2, idx + 1)
         fig.suptitle('Blue: GT, Red: Predicted')
         if inputs[idx].shape[-1] == 1:
 
