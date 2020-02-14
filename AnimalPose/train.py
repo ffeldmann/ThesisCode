@@ -96,6 +96,7 @@ class Iterator(TemplateIterator):
                 "images": {
                     "image_input": torch2numpy(inputs).transpose(0,2,3,1),
                     "outputs": torch2numpy(predictions).transpose(0,2,3,1),
+                    "targets": kwargs["targets"],
 
                 },
                 "scalars": {
@@ -113,9 +114,9 @@ class Iterator(TemplateIterator):
                 logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
 
             # log to tensorboard
-            #if self.config["integrations"]["tensorboardX"]["active"]:
+            #if self.config["integrations"]["tensorboard"]["active"]:
             #    # save model
-            #    self.tensorboardX_writer.add_graph(model)
+            #    self.tensorboard_writer.add_graph(model)
             #    self.logger.info("Added model graph to tensorboard")
 
 

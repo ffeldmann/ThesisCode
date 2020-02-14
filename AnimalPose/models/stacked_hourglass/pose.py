@@ -7,39 +7,6 @@ import numpy as np
 from torch import nn
 import os
 from torch.nn import DataParallel
-from utils.misc import make_input, make_output, importNet
-
-__config__ = {
-    'data_provider': 'data.MPII.dp',
-    'network': 'models.posenet.PoseNet',
-    'inference': {
-        'nstack': 8,
-        'inp_dim': 256,
-        'oup_dim': 16,
-        'num_parts': 16,
-        'increase': 0,
-        'keys': ['imgs'],
-        'num_eval': 2958, ## number of val examples used. entire set is 2958
-        'train_num_eval': 300, ## number of train examples tested at test time
-    },
-
-    'train': {
-        'batchsize': 16,
-        'input_res': 256,
-        'output_res': 64,
-        'train_iters': 1000,
-        'valid_iters': 10,
-        'learning_rate': 1e-3,
-        'max_num_people' : 1,
-        'loss': [
-            ['combined_hm_loss', 1],
-        ],
-        'decay_iters': 100000,
-        'decay_lr': 2e-4,
-        'num_workers': 2,
-        'use_data_loader': True,
-    },
-}
 
 class Trainer(nn.Module):
     """

@@ -1,5 +1,5 @@
-dataset: AnimalPose.data.AnimalVOC2011_UNet_Train
-validation_dataset: AnimalPose.data.AnimalVOC2011_UNet_Validation
+dataset: AnimalPose.data.AnimalVOC2011_Train
+validation_dataset: AnimalPose.data.AnimalVOC2011_Validation
 dataroot: 'VOC2011/cats_meta'
 n_classes: 20
 n_channels: 1 # rgb or grayscale

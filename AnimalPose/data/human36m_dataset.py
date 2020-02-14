@@ -1,15 +1,15 @@
-import h5py
-import os
 import copy
-import tqdm
+import os
+
 import edflow
-from edflow.data.dataset import DatasetMixin
-from edflow.data.believers.sequence import SequenceDataset
-from edflow.data.agnostics.subdataset import SubDataset
-from PIL import Image
+import h5py
 import numpy as np
+import tqdm
 from edflow import get_logger
-from edflow.data.util import adjust_support
+from edflow.data.agnostics.subdataset import SubDataset
+from edflow.data.believers.sequence import SequenceDataset
+from edflow.data.dataset import DatasetMixin
+
 import AnimalPose
 
 

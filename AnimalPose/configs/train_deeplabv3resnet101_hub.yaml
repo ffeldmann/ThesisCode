@@ -10,7 +10,6 @@ pretrained: True
 
 # Losses
 losses:
-  MSELossInstances:
     L2: true # TODO
     L2_kpt: true # TODO
 

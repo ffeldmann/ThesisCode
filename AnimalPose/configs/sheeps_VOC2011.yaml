@@ -1,8 +1,9 @@
-dataset: AnimalPose.data.AnimalVOC2011_UNet_Train
-validation_dataset: AnimalPose.data.AnimalVOC2011_UNet_Validation
+dataset: AnimalPose.data.AnimalVOC2011_Train
+validation_dataset: AnimalPose.data.AnimalVOC2011_Validation
 dataroot: 'VOC2011/sheeps_meta'
 n_classes: 20
 n_channels: 1 # rgb or grayscale
 bilinear: true
-resize_to: 96, 96
+resize_to: 128,128
 as_grey: True
+sigma: 4 # Good way sigma = size/64 for heatmaps

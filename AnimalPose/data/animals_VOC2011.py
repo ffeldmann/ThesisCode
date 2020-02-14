@@ -1,10 +1,11 @@
-import os
 import numpy as np
 import skimage.color
-from edflow.data.believers.meta import MetaDataset
-from AnimalPose.data.util import make_heatmaps, Rescale
 from edflow.data.agnostics.subdataset import SubDataset
+from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
+
+from AnimalPose.data.util import make_heatmaps, Rescale
+
 
 class AnimalVOC2011(MetaDataset):
     def __init__(self, config):
@@ -50,7 +51,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.sc = AnimalVOC2011(config)
         self.train = int(0.8 * len(self.sc))
         self.test = 1 - self.train
-
+        self.sigma = config["sigma"]
         if mode != "all":
             split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train+1, len(self.sc))
             self.data = SubDataset(self.sc, split_indices)
@@ -72,16 +73,16 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         else:
             example["inp"] = image
         example["kps"] = keypoints
-        example["targets"] = make_heatmaps(example["inp"], keypoints)
+        example["targets"] = make_heatmaps(example["inp"], keypoints, sigma=self.sigma)
         example.pop("frames") # TODO
         return example
 
-class AnimalVOC2011_UNet_Train(AnimalVOC2011_Abstract):
+class AnimalVOC2011_Train(AnimalVOC2011_Abstract):
     def __init__(self, config):
         super().__init__(config, mode="train")
 
 
-class AnimalVOC2011_UNet_Validation(AnimalVOC2011_Abstract):
+class AnimalVOC2011_Validation(AnimalVOC2011_Abstract):
     def __init__(self, config):
         super().__init__(config, mode="validation")
 

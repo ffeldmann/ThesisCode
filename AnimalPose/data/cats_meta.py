@@ -1,10 +1,10 @@
-import os
 import numpy as np
 import skimage.color
-from edflow.data.believers.meta import MetaDataset
-from AnimalPose.data.util import make_heatmaps, Rescale
 from edflow.data.agnostics.subdataset import SubDataset
+from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
+
+from AnimalPose.data.util import make_heatmaps, Rescale
 
 
 class SingleCats(MetaDataset):

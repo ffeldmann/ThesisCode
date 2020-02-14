@@ -1,7 +1,7 @@
 import torch
-from torch import nn
-from models.layers import Conv, Hourglass, Pool, Residual
-from task.loss import HeatmapLoss
+import torch.nn as nn
+from .hourglass_layers import Conv, Hourglass, Pool, Residual
+from .loss import HeatmapLoss
 
 
 class UnFlatten(nn.Module):
@@ -18,40 +18,40 @@ class Merge(nn.Module):
         return self.conv(x)
 
 
-class PoseNet(nn.Module):
-    def __init__(self, nstack, inp_dim, oup_dim, bn=False, increase=0, **kwargs):
-        super(PoseNet, self).__init__()
-
-        self.nstack = nstack
+class HourglassNet(nn.Module):
+    def __init__(self, config):
+        super(HourglassNet, self).__init__()
+        bn = False
+        increase = 0
+        self.nstack = config["nstack"]
         self.pre = nn.Sequential(
             Conv(3, 64, 7, 2, bn=True, relu=True),
             Residual(64, 128),
             Pool(2, 2),
             Residual(128, 128),
-            Residual(128, inp_dim)
+            Residual(128, config["inp_dim"])
         )
 
         self.hgs = nn.ModuleList([
             nn.Sequential(
-                Hourglass(4, inp_dim, bn, increase),
-            ) for i in range(nstack)])
+                Hourglass(4, config["inp_dim"], bn, increase),
+            ) for i in range(config["nstack"])])
 
         self.features = nn.ModuleList([
             nn.Sequential(
-                Residual(inp_dim, inp_dim),
-                Conv(inp_dim, inp_dim, 1, bn=True, relu=True)
-            ) for i in range(nstack)])
+                Residual(config["inp_dim"], config["inp_dim"]),
+                Conv(config["inp_dim"], config["inp_dim"], 1, bn=True, relu=True)
+            ) for i in range(config["nstack"])])
 
-        self.outs = nn.ModuleList([Conv(inp_dim, oup_dim, 1, relu=False, bn=False) for i in range(nstack)])
-        self.merge_features = nn.ModuleList([Merge(inp_dim, inp_dim) for i in range(nstack - 1)])
-        self.merge_preds = nn.ModuleList([Merge(oup_dim, inp_dim) for i in range(nstack - 1)])
-        self.nstack = nstack
+        self.outs = nn.ModuleList([Conv(config["inp_dim"], config["n_classes"], 1, relu=False, bn=False) for i in range(config["nstack"])])
+        self.merge_features = nn.ModuleList([Merge(config["inp_dim"], config["inp_dim"]) for i in range(config["nstack"] - 1)])
+        self.merge_preds = nn.ModuleList([Merge(config["n_classes"], config["inp_dim"]) for i in range(config["nstack"] - 1)])
         self.heatmapLoss = HeatmapLoss()
 
     def forward(self, imgs):
-        ## our posenet
-        x = imgs.permute(0, 3, 1, 2)  # x of size 1,3,inpdim,inpdim
-        x = self.pre(x)
+        ## our HourglassNet
+        #x = imgs.permute(0, 3, 1, 2)  # x of size 1,3, inpdim,inpdim
+        x = self.pre(imgs) # preprocessing??
         combined_hm_preds = []
         for i in range(self.nstack):
             hg = self.hgs[i](x)
