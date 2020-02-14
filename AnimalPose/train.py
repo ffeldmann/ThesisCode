@@ -9,6 +9,7 @@ from edflow.util import retrieve, walk
 import torch.nn.functional
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
+from AnimalPose.data.util import heatmap_to_image
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
 
 
@@ -95,8 +96,8 @@ class Iterator(TemplateIterator):
             logs = {
                 "images": {
                     "image_input": torch2numpy(inputs).transpose(0,2,3,1),
-                    "outputs": torch2numpy(predictions).transpose(0,2,3,1),
-                    "targets": kwargs["targets"],
+                    "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0,2,3,1),
+                    "targets": heatmap_to_image(kwargs["targets"]).transpose(0,2,3,1),
 
                 },
                 "scalars": {
