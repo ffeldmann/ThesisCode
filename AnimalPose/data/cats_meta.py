@@ -73,6 +73,7 @@ class SingleCatsUNet(DatasetMixin):
         self.sc = SingleCats(config)
         self.train = int(0.8 * len(self.sc))
         self.test = 1 - self.train
+        self.sigma = self.sc.config["sigma"]
 
         if mode != "all":
             # TODO Better split e.g. split per video!
@@ -96,7 +97,7 @@ class SingleCatsUNet(DatasetMixin):
         else:
             example["inp"] = image
         example["kps"] = keypoints
-        example["targets"] = make_heatmaps(example["inp"], keypoints)
+        example["targets"] = make_heatmaps(example["inp"], keypoints, sigma=self.sigma)
         example.pop("frames") # TODO
         return example
 
