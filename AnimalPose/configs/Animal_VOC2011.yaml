@@ -3,5 +3,5 @@ n_channels: 1 # rgb or grayscale
 bilinear: true
 resize_to: 128,128
 as_grey: True
-sigma: 4 # Good way sigma = size/64 for heatmaps
+sigma: 3 # Good way sigma = size/64 for heatmaps
 crop: True

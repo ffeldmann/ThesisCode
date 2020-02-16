@@ -18,7 +18,7 @@ losses:
 # logging
 integrations:
   git:
-    true
+    active: true
   tensorboard:
     active: true
 #  wandb:
