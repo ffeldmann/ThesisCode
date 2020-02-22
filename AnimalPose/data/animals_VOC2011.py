@@ -57,7 +57,14 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         else:
             self.data = self.sc
 
-    def get_example(self, idx):
+    def get_example(self, idx: object) -> object:
+        """
+        Args:
+            idx: integer indicating index of dataset
+
+        Returns: example element from dataset
+
+        """
         example = super().get_example(idx)
         image, keypoints = example["frames"](), self.labels["kps"][idx]
         if "crop" in self.data.data.config.keys():

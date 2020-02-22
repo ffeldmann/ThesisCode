@@ -8,7 +8,7 @@ from skimage.draw import circle, line_aa
 
 
 class Rescale(object):
-    """Rescale the image in a sample to a given size.
+    """Rescale the image and keypoints in a sample to a given size.
 
     Args:
         output_size (tuple or int): Desired output size. If tuple, output is
@@ -112,6 +112,8 @@ def make_heatmaps(image, keypoints, sigma=0.5):
         else:
             hm[idx, :, :] = np.zeros((image.shape[0], image.shape[1]))  # height, width
     return hm
+
+
 
 
 JointModel = namedtuple(

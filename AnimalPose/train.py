@@ -1,16 +1,15 @@
-import torch
 import time
-import pdb
-import numpy as np
+
 import torch
-import torch.optim as optim
-from edflow import TemplateIterator, get_logger
-from edflow.util import retrieve, walk
 import torch.nn.functional
-from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
-from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
+import torch.optim as optim
+from edflow import TemplateIterator
+from edflow.util import retrieve
+
 from AnimalPose.data.util import heatmap_to_image
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
+from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
+from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 
 
 class Iterator(TemplateIterator):
@@ -124,6 +123,7 @@ class Iterator(TemplateIterator):
             return logs
 
         def eval_op():
+            #percentage correct keypoints pck
             #return {
                 #"outputs": np.array(predictions.cpu().detach().numpy()),
                 #TODO in which shape is the outputs necessary for evaluation?
