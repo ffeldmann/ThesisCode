@@ -1,43 +1,24 @@
-import torch
 import numpy as np
-from collections import namedtuple
-from torchvision.models import vgg19
-from torchvision import transforms
+import torch
 
-
-# def update_loss_weights_inplace(loss_config, step):
-#     # update kl weights
-#     for weight_dict in loss_config.values():
-#         if "start_ramp_it" in weight_dict:
-#             if step < weight_dict["start_ramp_it"]:
-#                 weight_dict["weight"] = weight_dict["start_ramp_val"]
-#             elif step > weight_dict["end_ramp_it"]:
-#                 weight_dict["weight"] = weight_dict["end_ramp_val"]
-#             else:
-#                 ramp_progress = (step - weight_dict["start_ramp_it"]) / (
-#                     weight_dict["end_ramp_it"] - weight_dict["start_ramp_it"]
-#                 )
-#                 ramp_diff = weight_dict["end_ramp_val"] - weight_dict["start_ramp_val"]
-#                 weight_dict["weight"] = (
-#                     ramp_progress * ramp_diff + weight_dict["start_ramp_val"]
-#                 )
 
 def heatmap_loss(targets, predictions):
-    hm_loss = 0
     crit = torch.nn.MSELoss()
-    hm_mse = crit(torch.from_numpy(targets), predictions)
-    #for element in range(len(targets)):
-    #    for idx in range(len(predictions[1])):
-    #        hm_loss += torch.nn.functional.mse_loss(torch.from_numpy(targets[element, idx, :, :]), predictions[element, idx, :, :])
-    return hm_mse
+    return crit(torch.from_numpy(targets), predictions)
 
 
 def heatmaps_to_coords(heatmaps):
-    '''
+    """
+    Args:
+        heatmaps: numpy.ndarray([batch_size, num_joints, height, width])
+
+    Returns:
+
     From: https://github.com/microsoft/human-pose-estimation.pytorch/blob/master/lib/core/inference.py
     get predictions from score maps
-    heatmaps: numpy.ndarray([batch_size, num_joints, height, width])
-    '''
+
+    """
+
     assert isinstance(heatmaps, np.ndarray), \
         'batch_heatmaps should be numpy.ndarray'
     assert heatmaps.ndim == 4, 'batch_images should be 4-ndim'

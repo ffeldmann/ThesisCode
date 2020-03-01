@@ -1,4 +1,5 @@
 dataset: AnimalPose.data.AllAnimalsVOC2011_Train
 validation_dataset: AnimalPose.data.AllAnimalsVOC2011_Validation
-animals: ["cat", "dog"]
-#animals: ["cat", "dog", "sheep", "horse", "cow"]
+#animals: ["cat"]#, "dog"]
+#animals: ["sheep", "horse", "cow"]
+animals: ["cat", "dog", "sheep", "horse", "cow"]

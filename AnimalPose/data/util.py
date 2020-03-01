@@ -5,7 +5,8 @@ import numpy as np
 import skimage
 import skimage.transform
 from skimage.draw import circle, line_aa
-
+import copy
+from AnimalPose.utils.loss_utils import heatmaps_to_coords
 
 class Rescale(object):
     """Rescale the image and keypoints in a sample to a given size.
@@ -55,7 +56,7 @@ def heatmap_to_image(batch_heatmaps: np.ndarray):
     images = np.sum(batch_heatmaps, axis=1).reshape(batch, 1, height, width)
     hm_min = images.min(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     hm_max = images.max(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
-    hm_max.clip(min=1e-8)
+    hm_max.clip(min=1e-6)
     images = (images - hm_min) / hm_max
 
     return images
@@ -114,11 +115,88 @@ def make_heatmaps(image, keypoints, sigma=0.5):
     return hm
 
 
+def make_stickanimal(image, predictions):
+    """
+    Args:
+        image: batch of images [B, W, H, C]
+        joints: joint array
+        predictions: batch of prediction heatmaps [B, Joints, W, H]
+
+    Returns:
+
+    """
+
+    image = copy.deepcopy(image)
+    # Predictions to Keypoints
+    coords, _ = heatmaps_to_coords(predictions)
+
+    joints = [
+        # Head
+        [2, 0],  # Nose - L_Eye
+        [2, 1],  # Nose - R_Eye
+        [0, 3],  # L_Eye - L_EarBase
+        [1, 4],  # R_Eye - R_EarBase
+        [2, 8],  # Nose - Throat
+        # Body
+        [8, 9],  # Throat - L_F_Elbow
+        [8, 5],  # Throat - R_F_Elbow
+        # Front
+        [9, 16],  # L_F_Elbow - L_F_Knee
+        [16, 6],  # L_F_Knee - L_F_Paw
+        [5, 17],  # R_F_Elbow - R_F_Knee
+        [17, 7],  # R_F_Knee - R_F_Paw
+        #Back
+        [14, 18],  # L_B_Elbow - L_B_Knee
+        [18, 13],  # L_B_Knee - L_B_Paw
+        [15, 19],  # R_B_Elbow - R_B_Knee
+        [19, 13],  # R_B_Knee - R_B_Paw
+        [10, 11],  # Withers - TailBase
+    ]
+    #  BGR color such as: Blue = a, Green = b and Red = c
+    head = (255, 0, 0)
+    body = (0, 0, 0)
+    front = (0, 255, 0)
+    back = (0,0,255)
+
+
+    colordict = {
+        0: head,
+        1: head,
+        2: head,
+        3: head,
+        4: head,
+        5: body,
+        6: body,
+        7: front,
+        8: front,
+        9: front,
+        10: front,
+        11: back,
+        12: back,
+        13: back,
+        14: back,
+        15: back,
+    }
+
+
+    for idx, img in enumerate(image):
+        img = np.zeros((img.shape[0], img.shape[1], img.shape[2]), np.uint8)
+        for idx_joints, pair in enumerate(joints):
+            start = coords[idx][pair[0]].astype(np.uint8)
+            end = coords[idx][pair[1]].astype(np.uint8)
+            if np.isclose(start, [0,0]).any() or np.isclose(end, [0,0]).any():
+                continue
+            cv2.line(img, (start[0], start[1]), (end[0], end[1]), color=colordict[idx_joints], thickness=2)
+        image[idx] = img
+
+    return image
+
 
 
 JointModel = namedtuple(
     "JointModel",
-    "body right_lines left_lines head_lines face rshoulder lshoulder headup kps_to_use total_relative_joints kp_to_joint kps_to_change kps_to_change_rel",
+    "body right_lines left_lines head_lines face rshoulder lshoulder headup kps_to_use total_relative_joints kp_to_joint "
+    "kps_to_change kps_to_change_rel",
 )
 
 human_gait_joint_model = JointModel(

@@ -6,7 +6,7 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.data.util import heatmap_to_image
+from AnimalPose.data.util import heatmap_to_image, make_stickanimal
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
 from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
@@ -97,7 +97,8 @@ class Iterator(TemplateIterator):
                     "image_input": torch2numpy(inputs).transpose(0,2,3,1),
                     "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0,2,3,1),
                     "targets": heatmap_to_image(kwargs["targets"]).transpose(0,2,3,1),
-
+                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0,2,3,1) , torch2numpy(predictions)),
+                    # GT_Keypoints kwargs["labels_"]["kps"]
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
