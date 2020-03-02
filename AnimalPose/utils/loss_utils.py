@@ -3,7 +3,7 @@ import torch
 
 
 def heatmap_loss(targets, predictions):
-    crit = torch.nn.MSELoss()
+    crit = torch.nn.MSELoss(reduction="sum")
     return crit(torch.from_numpy(targets), predictions)
 
 

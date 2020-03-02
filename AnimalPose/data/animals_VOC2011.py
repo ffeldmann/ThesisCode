@@ -98,16 +98,15 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
         """
         example = super().get_example(idx)
-        image, keypoints, bboxes = example["frames"](), self.labels["kps"][idx], self.labels["bboxes"][idx]
+        image, keypoints, bboxes = example["frames"]().astype(np.float32, copy=False), self.labels["kps"][idx], self.labels["bboxes"][idx]
         if "crop" in self.data.data.config.keys():
             if self.data.data.config["crop"]:
                 image, keypoints = crop(image, keypoints, bboxes)
         if self.augmentation:
             # randomly perform some augmentations on the image, keypoints and bboxes
-            image, keypoints = self.seq(image=image.astype(np.float32, copy=False), keypoints=keypoints.reshape(1, -1, 2))
+            image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
         # (H, W, C) and keypoints need to be reshaped from (N,J,2) -> (J,2)  J==Number of joints / keypoint pairs
-        image, keypoints = self.data.data.rescale(adjust_support(image, "0->1"), keypoints.reshape(-1,2))
-
+        image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1,2))
         height = image.shape[0]
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():

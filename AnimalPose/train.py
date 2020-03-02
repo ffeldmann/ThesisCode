@@ -72,7 +72,7 @@ class Iterator(TemplateIterator):
         # TODO need (batch_size, channel, width, height)
         # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp"].transpose(0,3,1,2)).to("cuda")
+        inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
 
@@ -92,21 +92,24 @@ class Iterator(TemplateIterator):
 
         def log_op():
             from AnimalPose.utils.log_utils import plot_input_target_keypoints
+            from edflow.data.util import adjust_support
             logs = {
                 "images": {
-                    "image_input": torch2numpy(inputs).transpose(0,2,3,1),
-                    "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0,2,3,1),
-                    "targets": heatmap_to_image(kwargs["targets"]).transpose(0,2,3,1),
-                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0,2,3,1) , torch2numpy(predictions)),
+                    "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
+                    "outputs": adjust_support(heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1), "-1->1"),
+                    "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
+                    "stickanimal": adjust_support(
+                        make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), torch2numpy(predictions)), "-1->1"),
                     # GT_Keypoints kwargs["labels_"]["kps"]
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
                 },
                 "figures": {
-                    "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0,2,3,1), # get BHWC
-                                                        torch2numpy(predictions),# stay BCHW
-                                                        kwargs["kps"]),
+                    "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
+                                                                    # get BHWC
+                                                                    torch2numpy(predictions),  # stay BCHW
+                                                                    kwargs["kps"]),
                 }
             }
             if self.config["losses"]["L2"]:
@@ -115,21 +118,20 @@ class Iterator(TemplateIterator):
                 logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
 
             # log to tensorboard
-            #if self.config["integrations"]["tensorboard"]["active"]:
+            # if self.config["integrations"]["tensorboard"]["active"]:
             #    # save model
             #    self.tensorboard_writer.add_graph(model)
             #    self.logger.info("Added model graph to tensorboard")
 
-
             return logs
 
         def eval_op():
-            #percentage correct keypoints pck
-            #return {
-                #"outputs": np.array(predictions.cpu().detach().numpy()),
-                #TODO in which shape is the outputs necessary for evaluation?
-                #"labels": {k: [v.cpu().detach().numpy()] for k, v in losses["batch"].items()},
-            #}
+            # percentage correct keypoints pck
+            # return {
+            # "outputs": np.array(predictions.cpu().detach().numpy()),
+            # TODO in which shape is the outputs necessary for evaluation?
+            # "labels": {k: [v.cpu().detach().numpy()] for k, v in losses["batch"].items()},
+            # }
             return
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
