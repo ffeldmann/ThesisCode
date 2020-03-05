@@ -20,5 +20,5 @@ integrations:
   wandb:
     active: true
   tensorboard:
-    active: False
+    active: true
 

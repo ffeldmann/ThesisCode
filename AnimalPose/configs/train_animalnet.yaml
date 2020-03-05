@@ -1,4 +1,4 @@
-iterator: AnimalPose.train.Iterator
+iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
 batch_size: 32
 num_steps: 50001
@@ -9,17 +9,20 @@ ckpt_freq: 300
 # Encoder pretrained
 pretrained: True
 resnet_type: 152 #50,101,152
+encoder_latent_dim: 256
+decoder_latent_dim: 256
+encoder_2: True
 # Losses
 losses:
     L2: True # TODO
-    L2_kpt: True # TODO
+    L2_kpt: False # TODO
 
 # logging
 integrations:
   git:
     active: False
   wandb:
-    active: true
+    active: True
   tensorboard:
-    active: False
+    active: True
 

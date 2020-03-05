@@ -4,7 +4,6 @@ import skimage.color
 from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
-from edflow.data.util import adjust_support
 
 from AnimalPose.data.util import make_heatmaps, Rescale, crop
 
@@ -31,16 +30,16 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.augmentation = config["augmentation"]
         if self.augmentation:
             self.seq = iaa.Sequential([
-                #iaa.Sometimes(0.3, iaa.SaltAndPepper(0.01, per_channel=False)),
-                #iaa.Sometimes(0.3, iaa.CoarseDropout(0.01, size_percent=0.5)),
+                # iaa.Sometimes(0.3, iaa.SaltAndPepper(0.01, per_channel=False)),
+                # iaa.Sometimes(0.3, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Sometimes(0.3, iaa.Fliplr(0.5)),
                 iaa.Sometimes(0.3, iaa.Flipud(0.5)),
-                #iaa.Sometimes(0.3,
+                # iaa.Sometimes(0.3,
                 #            iaa.Affine(
                 #                rotate=10,
                 #                scale=(0.5, 0.7)
                 #            )
-                #),
+                # ),
             ])
         self.parts = {
             "L_Eye": 0,
@@ -98,7 +97,8 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
         """
         example = super().get_example(idx)
-        image, keypoints, bboxes = example["frames"]().astype(np.float32, copy=False), self.labels["kps"][idx], self.labels["bboxes"][idx]
+        image, keypoints, bboxes = example["frames"]().astype(np.float32, copy=False), self.labels["kps"][idx], \
+                                   self.labels["bboxes"][idx]
         if "crop" in self.data.data.config.keys():
             if self.data.data.config["crop"]:
                 image, keypoints = crop(image, keypoints, bboxes)
@@ -106,7 +106,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             # randomly perform some augmentations on the image, keypoints and bboxes
             image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
         # (H, W, C) and keypoints need to be reshaped from (N,J,2) -> (J,2)  J==Number of joints / keypoint pairs
-        image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1,2))
+        image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1, 2))
         height = image.shape[0]
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():
@@ -120,7 +120,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             example["inp"] = image
         example["kps"] = keypoints
         example["targets"] = make_heatmaps(example["inp"], keypoints, sigma=self.sigma)
-        #example["joints"] = self.joints
+        # example["joints"] = self.joints
         example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
         return example
 
@@ -138,7 +138,7 @@ class AnimalVOC2011_Validation(AnimalVOC2011_Abstract):
 
 class AllAnimalsVOC2011_Train(AnimalVOC2011_Abstract):
     def __init__(self, config):
-        #self.animals  = [AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'})) for animal in config["animals"]]
+        # self.animals  = [AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'})) for animal in config["animals"]]
         for animal in config["animals"]:
             try:
                 self.data += AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))

@@ -1,3 +1,4 @@
+import copy
 from collections import namedtuple
 
 import cv2
@@ -5,7 +6,7 @@ import numpy as np
 import skimage
 import skimage.transform
 from skimage.draw import circle, line_aa
-import copy
+
 from AnimalPose.utils.loss_utils import heatmaps_to_coords
 
 class Rescale(object):
@@ -42,6 +43,7 @@ class Rescale(object):
 
         return img, keypoints
 
+
 def heatmap_to_image(batch_heatmaps: np.ndarray):
     """
 
@@ -53,12 +55,12 @@ def heatmap_to_image(batch_heatmaps: np.ndarray):
     """
     # https://github.com/numpy/numpy/issues/9568
     np.seterr(under='ignore', invalid='ignore')
-    batch, _,  width, height = batch_heatmaps.shape
+    batch, _, width, height = batch_heatmaps.shape
     images = np.sum(batch_heatmaps, axis=1).reshape(batch, 1, height, width)
     hm_min = images.min(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     hm_max = images.max(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
-    #hm_max.clip(min=1e-6)
-    #images = (images - hm_min) / hm_max
+    # hm_max.clip(min=1e-6)
+    # images = (images - hm_min) / hm_max
     return images
 
 
@@ -74,7 +76,7 @@ def crop(image, keypoints, bbox):
 
     """
 
-    #bbox = np.floor(bbox).astype(int)
+    # bbox = np.floor(bbox).astype(int)
     img = image[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2], :]
     # First subtract the bounding box x and y from the coordinates of the keypoints
     keypoints = np.subtract(np.array(keypoints), np.array([bbox[0], bbox[1]]))
@@ -125,10 +127,12 @@ def make_stickanimal(image, predictions):
     Returns:
 
     """
-
     image = copy.deepcopy(image)
-    # Predictions to Keypoints
-    coords, _ = heatmaps_to_coords(predictions)
+    if predictions.shape[-1] !=2:
+        # Predictions to Keypoints
+        coords, _ = heatmaps_to_coords(predictions)
+    else:
+        coords = predictions
 
     joints = [
         # Head
@@ -145,19 +149,18 @@ def make_stickanimal(image, predictions):
         [16, 6],  # L_F_Knee - L_F_Paw
         [5, 17],  # R_F_Elbow - R_F_Knee
         [17, 7],  # R_F_Knee - R_F_Paw
-        #Back
+        # Back
         [14, 18],  # L_B_Elbow - L_B_Knee
-        [18, 13],  # L_B_Knee - L_B_Paw
+        [18, 12],  # L_B_Knee - L_B_Paw
         [15, 19],  # R_B_Elbow - R_B_Knee
         [19, 13],  # R_B_Knee - R_B_Paw
         [10, 11],  # Withers - TailBase
     ]
     #  BGR color such as: Blue = a, Green = b and Red = c
-    head = (255, 0, 0)
-    body = (0, 0, 0)
-    front = (0, 255, 0)
-    back = (0,0,255)
-
+    head = (255, 0, 0) # red
+    body = (255, 255, 255) # white
+    front = (0, 255, 0) # green
+    back = (0, 0, 255) # blue
 
     colordict = {
         0: head,
@@ -177,20 +180,18 @@ def make_stickanimal(image, predictions):
         14: back,
         15: back,
     }
-
-
     for idx, img in enumerate(image):
+        #import pdb; pdb.set_trace()
         img = np.zeros((img.shape[0], img.shape[1], img.shape[2]), np.uint8)
         for idx_joints, pair in enumerate(joints):
-            start = coords[idx][pair[0]].astype(np.uint8)
-            end = coords[idx][pair[1]].astype(np.uint8)
-            if np.isclose(start, [0,0]).any() or np.isclose(end, [0,0]).any():
+            start = coords[idx][pair[0]]
+            end = coords[idx][pair[1]]
+            if np.isclose(start, [0, 0]).any() or np.isclose(end, [0, 0]).any():
                 continue
-            cv2.line(img, (start[0], start[1]), (end[0], end[1]), color=colordict[idx_joints], thickness=2)
+            cv2.line(img, (int(start[0]), int(start[1])), (int(end[0]), int(end[1])), color=colordict[idx_joints], thickness=2)
         image[idx] = img
 
     return image
-
 
 
 JointModel = namedtuple(

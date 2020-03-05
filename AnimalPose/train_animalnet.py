@@ -18,7 +18,7 @@ class Iterator(TemplateIterator):
         # loss and optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr"])
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
-
+        self.encoder2 = True if self.config["encoder_2"] else False
         if self.cuda:
             self.model.cuda()
         # hooks
@@ -42,13 +42,13 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, targets, predictions, gt_coords):
+    def criterion(self, targets, predictions):
         # calculate losses
+        crit = torch.nn.MSELoss()
+
         instance_losses = {}
         if self.config["losses"]["L2"]:
-            instance_losses["heatmap_loss"] = heatmap_loss(targets, predictions)
-        if self.config["losses"]["L2_kpt"]:
-            instance_losses["keypoint_loss"] = keypoint_loss(predictions, gt_coords)
+            instance_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions)
         instance_losses["total"] = sum(
             [
                 instance_losses[key]
@@ -75,12 +75,14 @@ class Iterator(TemplateIterator):
         inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
-
         # compute model
-        predictions = model(inputs)
+        if self.encoder2:
+            predictions = model(inputs, inputs) # TODO
+        else:
+            predictions = model(inputs)
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        losses = self.criterion(kwargs["targets"], predictions.cpu(), kwargs["kps"])
+        losses = self.criterion(kwargs["inp"].transpose(0,3,1,2), predictions.cpu())
 
         def train_op():
             before = time.time()
@@ -91,41 +93,19 @@ class Iterator(TemplateIterator):
                 self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
-            from AnimalPose.utils.log_utils import plot_input_target_keypoints
             from edflow.data.util import adjust_support
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
+                    "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1),
                                               "-1->1"),
-                    "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
-                    "gt_stickanimal": adjust_support(
-                        make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]), "-1->1"),
-                    "stickanimal": adjust_support(
-                        make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), torch2numpy(predictions)), "-1->1"),
-                    # GT_Keypoints kwargs["labels_"]["kps"]
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
                 },
-                "figures": {
-                    "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
-                                                                    # get BHWC
-                                                                    torch2numpy(predictions),  # stay BCHW
-                                                                    kwargs["kps"]),
-                }
             }
             if self.config["losses"]["L2"]:
-                logs["scalars"]["heatmap_loss"] = losses["batch"]["heatmap_loss"]
-            if self.config["losses"]["L2_kpt"]:
-                logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
-
-            # log to tensorboard
-            # if self.config["integrations"]["tensorboard"]["active"]:
-            #    # save model
-            #    self.tensorboard_writer.add_graph(model)
-            #    self.logger.info("Added model graph to tensorboard")
-
+                logs["scalars"]["L2_loss"] = losses["batch"]["L2_loss"]
             return logs
 
         def eval_op():
