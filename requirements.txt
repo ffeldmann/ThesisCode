@@ -6,3 +6,4 @@ pytest
 tensorboard
 imgaug
 wandb
+scikit-learn

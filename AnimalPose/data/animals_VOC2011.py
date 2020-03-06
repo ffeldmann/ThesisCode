@@ -4,8 +4,9 @@ import skimage.color
 from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
-
+import sklearn.model_selection
 from AnimalPose.data.util import make_heatmaps, Rescale, crop
+from edflow.data.util import adjust_support
 
 
 class AnimalVOC2011(MetaDataset):
@@ -30,17 +31,27 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.augmentation = config["augmentation"]
         if self.augmentation:
             self.seq = iaa.Sequential([
-                # iaa.Sometimes(0.3, iaa.SaltAndPepper(0.01, per_channel=False)),
-                # iaa.Sometimes(0.3, iaa.CoarseDropout(0.01, size_percent=0.5)),
-                iaa.Sometimes(0.3, iaa.Fliplr(0.5)),
-                iaa.Sometimes(0.3, iaa.Flipud(0.5)),
-                # iaa.Sometimes(0.3,
-                #            iaa.Affine(
-                #                rotate=10,
-                #                scale=(0.5, 0.7)
-                #            )
-                # ),
-            ])
+                iaa.AdditiveGaussianNoise(scale=0.05 * 255),
+                iaa.Sometimes(0.3, iaa.SaltAndPepper(0.01, per_channel=False)),
+                iaa.Sometimes(0.3, iaa.CoarseDropout(0.01, size_percent=0.5)),
+                iaa.Fliplr(0.3),
+                iaa.Flipud(0.3),
+                iaa.Sometimes(0.3,
+                              iaa.Affine(
+                                  rotate=10,
+                                  scale=(0.5, 0.7)
+                              )
+                              ),
+                iaa.Sometimes(0.3, iaa.GaussianBlur(sigma=(0, 3.0))),
+                iaa.LinearContrast((0.75, 1.5)),
+                # Convert each image to grayscale and then overlay the
+                # result with the original with random alpha. I.e. remove
+                # colors with varying strengths.
+                iaa.Grayscale(alpha=(0.0, 1.0)),
+                iaa.Sometimes(0.3, iaa.Rain(speed=(0.1, 0.3))),
+                iaa.Sometimes(0.3, iaa.Clouds()),
+                iaa.Sometimes(0.3, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
+            ], random_order=True)
         self.parts = {
             "L_Eye": 0,
             "R_Eye": 1,
@@ -83,8 +94,17 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         ]
 
         if mode != "all":
-            split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train + 1, len(self.sc))
-            self.data = SubDataset(self.sc, split_indices)
+            # split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train + 1, len(self.sc))
+            dset_indices = np.arange(len(self.sc))
+            train_indices, test_indices = sklearn.model_selection.train_test_split(dset_indices,
+                                                                                   train_size=float(
+                                                                                       config["train_size"]),
+                                                                                   random_state=int(
+                                                                                       config["random_state"]))
+            if mode == "train":
+                self.data = SubDataset(self.sc, train_indices)
+            else:
+                self.data = SubDataset(self.sc, test_indices)
         else:
             self.data = self.sc
 
@@ -99,6 +119,8 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         example = super().get_example(idx)
         image, keypoints, bboxes = example["frames"]().astype(np.float32, copy=False), self.labels["kps"][idx], \
                                    self.labels["bboxes"][idx]
+        # need uint 8 for augmentation methods
+        image = adjust_support(image, "0->255")
         if "crop" in self.data.data.config.keys():
             if self.data.data.config["crop"]:
                 image, keypoints = crop(image, keypoints, bboxes)
@@ -107,6 +129,10 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
         # (H, W, C) and keypoints need to be reshaped from (N,J,2) -> (J,2)  J==Number of joints / keypoint pairs
         image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1, 2))
+
+        # we always work with "0->1" images and np.float32
+        image = adjust_support(image, "0->1")
+
         height = image.shape[0]
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():
@@ -128,7 +154,6 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 class AnimalVOC2011_Train(AnimalVOC2011_Abstract):
     def __init__(self, config):
         super().__init__(config, mode="train")
-
 
 class AnimalVOC2011_Validation(AnimalVOC2011_Abstract):
     def __init__(self, config):

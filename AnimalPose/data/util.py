@@ -59,8 +59,8 @@ def heatmap_to_image(batch_heatmaps: np.ndarray):
     images = np.sum(batch_heatmaps, axis=1).reshape(batch, 1, height, width)
     hm_min = images.min(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     hm_max = images.max(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
-    # hm_max.clip(min=1e-6)
-    # images = (images - hm_min) / hm_max
+    hm_max.clip(min=1e-6)
+    images = (images - hm_min) / hm_max
     return images
 
 

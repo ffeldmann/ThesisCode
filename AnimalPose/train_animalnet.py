@@ -97,8 +97,7 @@ class Iterator(TemplateIterator):
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1),
-                                              "-1->1"),
+                    "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1),"-1->1"),
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],

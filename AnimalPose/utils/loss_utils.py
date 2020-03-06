@@ -7,10 +7,11 @@ def heatmap_loss(targets, predictions):
     return crit(torch.from_numpy(targets), predictions)
 
 
-def heatmaps_to_coords(heatmaps):
+def heatmaps_to_coords(heatmaps, thresh: float = 0.0):
     """
     Args:
         heatmaps: numpy.ndarray([batch_size, num_joints, height, width])
+        thresh:
 
     Returns:
 
@@ -44,6 +45,7 @@ def heatmaps_to_coords(heatmaps):
     preds *= pred_mask
     return preds, maxvals
 
+
 def keypoint_loss(predictions, gt_coords):
     crit = torch.nn.MSELoss()
     coords, _ = heatmaps_to_coords(predictions.cpu().detach().numpy())
@@ -53,6 +55,7 @@ def keypoint_loss(predictions, gt_coords):
 class MSELossInstances(torch.nn.MSELoss):
     """MSELoss, which reduces to instances of the batch
     """
+
     def __init__(self):
         super().__init__(reduction="none")
 
@@ -62,18 +65,88 @@ class MSELossInstances(torch.nn.MSELoss):
         return reduced
 
 
-class L1LossInstances(torch.nn.L1Loss):
-    """L1Loss, which reduces to instances of the batch
+def percentage_correct_keypoints(keypoints: np.array, predicted: np.array, distance: float = 0.5):
     """
+    Args:
+        keypoints: keypoints with shape [B, N, 2] or [N,2]
+        predicted: predicted keypoints with shape [B, N, 2] or [N,2]
+        distance:
 
-    def __init__(self):
-        super().__init__(reduction="none")
+    Returns:
+    """
+    assert type(keypoints) == np.array, f"Keypoints should be type np.array, got {type(keypoints)}"
+    assert type(predicted) == np.array, f"Predicted should be type np.array, got {type(predicted)}"
+    assert type(distance) == float, f"Distance should be type float, got {type(distance)}"
 
-    def forward(self, image: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        super_result = super().forward(image, target)
-        reduced = super_result.mean(axis=(1, 2, 3))
-        return reduced
+    assert keypoints.shape == predicted.shape, f"Arrays should have the same shape, got {keypoints.shape} and {predicted.shape}"
 
+    # Todo for batch
+    keypoints_close = np.isclose(keypoints, predicted, atol=distance)
+    return np.sum(keypoints_close) / len(keypoints)
+
+
+
+
+def pck(source_points, warped_points, dataset_name='PF-PASCAL', alpha=0.1):
+    batch_size = source_points.size(0)
+    pck = torch.zeros((batch_size))
+    num_pts = torch.zeros((batch_size))
+    correct_index = -torch.ones((batch_size, 20))
+    for idx in range(batch_size):
+        p_src = source_points[idx, :]
+        p_wrp = warped_points[idx, :]
+        if dataset_name == 'PF-WILLOW':
+            L_pck = torch.Tensor([torch.max(p_src.max(1)[0] - p_src.min(1)[0])]).cuda()
+        elif dataset_name == 'PF-PASCAL':
+            L_pck = torch.Tensor([224.0]).cuda()
+        N_pts = torch.sum(torch.ne(p_src[0, :], -1) * torch.ne(p_src[1, :], -1))
+        num_pts[idx] = N_pts
+        point_distance = torch.pow(torch.sum(torch.pow(p_src[:, :N_pts] - p_wrp[:, :N_pts], 2), 0), 0.5)
+        L_pck_mat = L_pck.expand_as(point_distance)
+        correct_points = torch.le(point_distance, L_pck_mat * alpha)
+        C_pts = torch.sum(correct_points)
+        correct_index[idx, :C_pts] = torch.nonzero(correct_points).view(-1)
+        pck[idx] = torch.mean(correct_points.float())
+
+    # batch_size is 1
+    if batch_size == 1:
+        pck = pck[0].item()
+        num_pts = int(num_pts[0].item())
+        correct_index = correct_index.squeeze().cpu().numpy().astype(np.int8)
+        correct_index = correct_index[np.where(correct_index > -1)]
+
+    return pck, correct_index, num_pts
+
+
+
+
+
+
+
+# def scale_img(x):
+#     """
+#     Scale in between 0 and 1
+#     :param x:
+#     :return:
+#     """
+#     # ma = torch.max(x)
+#     # mi = torch.min(x)
+#     out = (x + 1.0) / 2.0
+#     out = torch.clamp(out, 0.0, 1.0)
+#     return out
+#
+# class L1LossInstances(torch.nn.L1Loss):
+#     """L1Loss, which reduces to instances of the batch
+#     """
+#
+#     def __init__(self):
+#         super().__init__(reduction="none")
+#
+#     def forward(self, image: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+#         super_result = super().forward(image, target)
+#         reduced = super_result.mean(axis=(1, 2, 3))
+#         return reduced
+#
 
 # class MaskedL1LossInstances(L1LossInstances):
 #     def __init__(self, config: dict) -> None:
@@ -158,129 +231,3 @@ class L1LossInstances(torch.nn.L1Loss):
 #         dim=-1,
 #     )
 #     return kl_loss
-
-
-def scale_img(x):
-    """
-    Scale in between 0 and 1
-    :param x:
-    :return:
-    """
-    # ma = torch.max(x)
-    # mi = torch.min(x)
-    out = (x + 1.0) / 2.0
-    out = torch.clamp(out, 0.0, 1.0)
-    return out
-
-
-# VGGOutput = namedtuple(
-#     "VGGOutput", ["input", "relu1_2", "relu2_2", "relu3_2", "relu4_2", "relu5_2"],
-# )
-# VGGTargetLayers = {
-#     "3": "relu1_2",
-#     "8": "relu2_2",
-#     "13": "relu3_2",
-#     "22": "relu4_2",
-#     "31": "relu5_2",
-# }
-#
-#
-# def vgg_loss(custom_vgg, target, pred, weights=None):
-#     """
-#
-#     :param custom_vgg:
-#     :param target:
-#     :param pred:
-#     :return:
-#     """
-#     target_feats = custom_vgg(target)
-#     pred_feats = custom_vgg(pred)
-#     if weights is None:
-#
-#         loss = torch.cat(
-#             [
-#                 FLAGS.vgg_feat_weights[i]
-#                 * torch.mean(torch.abs(tf - pf), dim=[1, 2, 3]).unsqueeze(dim=-1)
-#                 for i, (tf, pf) in enumerate(zip(target_feats, pred_feats))
-#             ],
-#             dim=-1,
-#         )
-#     else:
-#         pix_loss = [
-#             FLAGS.vgg_feat_weights[0]
-#             * torch.mean(weights * torch.abs(target_feats[0] - pred_feats[0]))
-#             .unsqueeze(dim=-1)
-#             .to(torch.float)
-#         ]
-#         loss = torch.cat(
-#             pix_loss
-#             + [
-#                 FLAGS.vgg_feat_weights[i + 1]
-#                 * torch.mean(torch.abs(tf - pf), dim=[1, 2, 3]).unsqueeze(dim=-1)
-#                 for i, (tf, pf) in enumerate(zip(target_feats[1:], pred_feats[1:]))
-#             ],
-#             dim=-1,
-#         )
-#
-#     loss = torch.sum(loss, dim=1)
-#     return loss
-#
-#
-# class PerceptualVGG(torch.nn.Module):
-#     def __init__(self, vgg):
-#         super().__init__()
-#         # self.vgg = vgg19(pretrained=True)
-#         if isinstance(vgg, torch.nn.DataParallel):
-#             self.vgg_layers = vgg.module.features
-#         else:
-#             self.vgg_layers = vgg.features
-#
-#         self.input_transform = transforms.Compose(
-#             [
-#                 transforms.Normalize(
-#                     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-#                 )
-#             ]
-#         )
-#
-#     def forward(self, x):
-#         out = {"input": x}
-#         # normalize in between 0 and 1
-#         x = scale_img(x)
-#         # normalize appropriate for vgg
-#         x = torch.stack([self.input_transform(el) for el in torch.unbind(x)])
-#
-#         for name, submodule in self.vgg_layers._modules.items():
-#             # x = submodule(x)
-#             if name in VGGTargetLayers:
-#                 x = submodule(x)
-#                 out[VGGTargetLayers[name]] = x
-#             else:
-#                 with torch.no_grad():
-#                     x = submodule(x)
-#
-#         return VGGOutput(**out)
-#
-#
-# class PerceptualLossInstances(torch.nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.config = config
-#         vgg = vgg19(pretrained=True)
-#         vgg.eval()
-#         self.custom_vgg = PerceptualVGG(vgg)
-#
-#         vgg_feat_weights = config.setdefault(
-#             "vgg_feat_weights", (len(VGGTargetLayers) + 1) * [1.0]
-#         )
-#         assert len(vgg_feat_weights) == len(VGGTargetLayers) + 1
-#         flags.DEFINE_list(
-#             "vgg_feat_weights",
-#             vgg_feat_weights,
-#             "The weights for the considered layer outputs of vgg19 for the perceptual loss.",
-#         )
-#         FLAGS([""])
-#
-#     def forward(self, image, target):
-#         loss = vgg_loss(self.custom_vgg, target, image)
-#         return loss

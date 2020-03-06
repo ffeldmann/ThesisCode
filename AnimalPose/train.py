@@ -96,8 +96,7 @@ class Iterator(TemplateIterator):
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
-                                              "-1->1"),
+                    "outputs": adjust_support(heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1), "-1->1"),
                     "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
                     "gt_stickanimal": adjust_support(
                         make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]), "-1->1"),
