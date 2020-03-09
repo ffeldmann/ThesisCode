@@ -8,12 +8,20 @@ import sklearn.model_selection
 from AnimalPose.data.util import make_heatmaps, Rescale, crop
 from edflow.data.util import adjust_support
 
+animal_class = {"cats": 0,
+               "dogs": 1,
+               "sheeps": 2,
+               "cows": 3,
+               "horses": 4,
+               }
 
 class AnimalVOC2011(MetaDataset):
     def __init__(self, config):
         super().__init__(config["dataroot"])
         self.config = config
         self.crop = crop
+        # works if dataroot like "VOC2011/cats_meta"
+        self.animal = config["dataroot"].split("/")[1].split("_")[0]
         if "rescale_to" in self.config.keys():
             self.rescale = Rescale(self.config["rescale_to"])
         else:
@@ -31,7 +39,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.augmentation = config["augmentation"]
         if self.augmentation:
             self.seq = iaa.Sequential([
-                iaa.AdditiveGaussianNoise(scale=0.05 * 255),
+                iaa.Sometimes(0.3,iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
                 iaa.Sometimes(0.3, iaa.SaltAndPepper(0.01, per_channel=False)),
                 iaa.Sometimes(0.3, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(0.3),
@@ -52,6 +60,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 iaa.Sometimes(0.3, iaa.Clouds()),
                 iaa.Sometimes(0.3, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
+
         self.parts = {
             "L_Eye": 0,
             "R_Eye": 1,
@@ -146,6 +155,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             example["inp"] = image
         example["kps"] = keypoints
         example["targets"] = make_heatmaps(example["inp"], keypoints, sigma=self.sigma)
+        example["animal_class"] = np.array(animal_class[self.data.data.animal])
         # example["joints"] = self.joints
         example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
         return example

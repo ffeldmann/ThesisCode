@@ -3,6 +3,25 @@ import numpy as np
 from edflow.data.util import adjust_support
 from AnimalPose.utils.loss_utils import heatmaps_to_coords
 
+def plot_pred_figure(images, predictions):
+    """
+    Args:
+        images:
+        predictions:
+    Returns:
+    """
+    from AnimalPose.data.animals_VOC2011 import animal_class
+    idx_to_animal = {v: k for k, v in animal_class.items()}
+    fig = plt.figure(figsize=(10, 10))
+    for idx in range(8):
+        fig.add_subplot(4, 2, idx + 1)
+        fig.suptitle('Input, Prediction')
+        plt.title(f"{idx_to_animal[predictions[idx]]}")
+        plt.imshow(images[idx].cpu().numpy().transpose(1, 2, 0))
+        plt.tight_layout()
+
+    return fig
+
 
 def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords):
     """

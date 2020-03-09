@@ -1,0 +1,25 @@
+iterator: AnimalPose.train_resnet_classification.Iterator
+model: AnimalPose.models.ResnetTorchVisionClass
+batch_size: 32
+num_steps: 50001
+lr: 0.0001
+cuda: true  # False -> use GPU
+ckpt_freq: 300
+#Training methods
+pretrained: True
+resnet_type: 152 #50,101,152
+# Losses
+losses:
+    CEL: True # Cross entropy loss
+    #L2: True # TODO
+    #L2_kpt: True # TODO
+
+# logging
+integrations:
+  git:
+    active: False
+  wandb:
+    active: true
+  tensorboard:
+    active: true
+
