@@ -48,7 +48,7 @@ class Iterator(TemplateIterator):
         if self.config["losses"]["L2"]:
             instance_losses["heatmap_loss"] = heatmap_loss(targets, predictions)
         if self.config["losses"]["L2_kpt"]:
-            instance_losses["keypoint_loss"] = keypoint_loss(predictions, gt_coords)
+            instance_losses["keypoint_loss"] = keypoint_loss(predictions, gt_coords, True)
         instance_losses["total"] = sum(
             [
                 instance_losses[key]
@@ -87,25 +87,27 @@ class Iterator(TemplateIterator):
             self.optimizer.zero_grad()
             losses["batch"]["total"].backward()
             self.optimizer.step()
-            if retrieve(self.config, "debug_timing", default=False):
-                self.logger.info("train step needed {} s".format(time.time() - before))
+            #if retrieve(self.config, "debug_timing", default=False):
+            #    self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
             from AnimalPose.utils.log_utils import plot_input_target_keypoints
+            from AnimalPose.utils.loss_utils import percentage_correct_keypoints, heatmaps_to_coords
             from edflow.data.util import adjust_support
+
+            pck, pck_joints = percentage_correct_keypoints(kwargs["kps"], heatmaps_to_coords(torch2numpy(predictions))[0],
+                                               self.config['pck_alpha'])
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1), "-1->1"),
+                    "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
                     "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
-                    "gt_stickanimal": adjust_support(
-                        make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]), "-1->1"),
-                    "stickanimal": adjust_support(
-                        make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), torch2numpy(predictions)), "-1->1"),
-                    # GT_Keypoints kwargs["labels_"]["kps"]
+                    "gt_stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
+                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), torch2numpy(predictions)),
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
+                    f"PCK@{self.config['pck_alpha']}": pck,
                 },
                 "figures": {
                     "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
@@ -119,11 +121,20 @@ class Iterator(TemplateIterator):
             if self.config["losses"]["L2_kpt"]:
                 logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
 
-            # log to tensorboard
-            # if self.config["integrations"]["tensorboard"]["active"]:
-            #    # save model
-            #    self.tensorboard_writer.add_graph(model)
-            #    self.logger.info("Added model graph to tensorboard")
+            for idx, val in enumerate(pck_joints):
+                logs["scalars"][f"PCK@{self.config['pck_alpha']}_{self.dataset.get_idx_parts(idx)}"] = val
+
+            # Add left and right
+            def accumulate_side(idx, val, side="L"):
+                if side in self.dataset.get_idx_parts(idx):
+                    try:
+                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] += val
+                    except:
+                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] = val
+
+            for idx, val in enumerate(pck_joints):
+                accumulate_side(idx, val, "L")
+                accumulate_side(idx, val, "R")
 
             return logs
 

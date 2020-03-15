@@ -4,7 +4,7 @@ batch_size: 8
 num_steps: 50001
 lr: 0.0001
 cuda: true  # False -> use GPU
-ckpt_freq: 300
+ckpt_freq: 1000
 #Training methods
 #pretrained_checkpoint:
 

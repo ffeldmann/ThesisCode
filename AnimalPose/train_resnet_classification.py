@@ -48,7 +48,7 @@ class Iterator(TemplateIterator):
         instance_losses = {}
         if self.config["losses"]["CEL"]:
             crit = nn.CrossEntropyLoss()
-            instance_losses["CEL"] = crit(predictions, torch.from_numpy(targets).to("cuda"))
+            instance_losses["CEL"] = crit(predictions, targets)
         instance_losses["total"] = sum(
             [
                 instance_losses[key]
@@ -76,12 +76,18 @@ class Iterator(TemplateIterator):
         # inputs now
         # (batch_size, channel, width, height)
 
+        # animal labels
+        labels = torch.from_numpy(kwargs["animal_class"]).to("cuda")
         # compute model
         outputs = model(inputs)
         _, preds = torch.max(outputs, 1)
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        losses = self.criterion(kwargs["animal_class"], outputs)
+        losses = self.criterion(labels, outputs)
+
+        # Compute accuracy for batch
+        corrects = torch.sum(preds == labels.data)
+        accuracy = corrects.double() / self.config["batch_size"]
 
         def train_op():
             before = time.time()
@@ -94,18 +100,18 @@ class Iterator(TemplateIterator):
         def log_op():
             from AnimalPose.utils.log_utils import plot_pred_figure
             from edflow.data.util import adjust_support
+
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
+                    "accuracy": accuracy.cpu().numpy(),
                 },
                 "figures": {
                     "predictions": plot_pred_figure(inputs, preds.cpu().detach().numpy())
                 }
-
-
 
             }
             if self.config["losses"]["CEL"]:

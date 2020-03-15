@@ -6,6 +6,7 @@ import numpy as np
 import skimage
 import skimage.transform
 from skimage.draw import circle, line_aa
+from edflow.data.util import adjust_support
 
 from AnimalPose.utils.loss_utils import heatmaps_to_coords
 
@@ -78,11 +79,15 @@ def crop(image, keypoints, bbox):
 
     # bbox = np.floor(bbox).astype(int)
     img = image[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2], :]
+    zero_mask_x = np.where(keypoints[:,0] <= 0)
+    zero_mask_y = np.where(keypoints[:, 1] <= 0)
     # First subtract the bounding box x and y from the coordinates of the keypoints
     keypoints = np.subtract(np.array(keypoints), np.array([bbox[0], bbox[1]]))
     # Set the keypoints which were zero back to zero
+    #keypoints[keypoints[:, 1] <= 0] = np.array([0, 0])
+    keypoints[zero_mask_x] = np.array([0, 0])
+    keypoints[zero_mask_y] = np.array([0, 0])
 
-    keypoints[keypoints[:, 1] <= 0] = np.array([0, 0])
     return img, keypoints
 
 
@@ -127,7 +132,7 @@ def make_stickanimal(image, predictions):
     Returns:
 
     """
-    image = copy.deepcopy(image)
+    image = adjust_support(np.copy(image), "0->255").astype(np.uint8)
     if predictions.shape[-1] !=2:
         # Predictions to Keypoints
         coords, _ = heatmaps_to_coords(predictions)
@@ -180,9 +185,10 @@ def make_stickanimal(image, predictions):
         14: back,
         15: back,
     }
-    for idx, img in enumerate(image):
+    for idx, orig in enumerate(image):
         #import pdb; pdb.set_trace()
-        img = np.zeros((img.shape[0], img.shape[1], img.shape[2]), np.uint8)
+        img = np.zeros((orig.shape[0], orig.shape[1], orig.shape[2]), np.uint8)
+        img[:,:,:] = orig
         for idx_joints, pair in enumerate(joints):
             start = coords[idx][pair[0]]
             end = coords[idx][pair[1]]
@@ -191,7 +197,7 @@ def make_stickanimal(image, predictions):
             cv2.line(img, (int(start[0]), int(start[1])), (int(end[0]), int(end[1])), color=colordict[idx_joints], thickness=2)
         image[idx] = img
 
-    return image
+    return adjust_support(image, "-1->1")
 
 
 JointModel = namedtuple(
