@@ -4,7 +4,6 @@ import torch
 import torch.nn.functional
 import torch.optim as optim
 from edflow import TemplateIterator
-from edflow.util import retrieve
 
 from AnimalPose.data.util import heatmap_to_image, make_stickanimal
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
@@ -87,7 +86,7 @@ class Iterator(TemplateIterator):
             self.optimizer.zero_grad()
             losses["batch"]["total"].backward()
             self.optimizer.step()
-            #if retrieve(self.config, "debug_timing", default=False):
+            # if retrieve(self.config, "debug_timing", default=False):
             #    self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
@@ -95,19 +94,25 @@ class Iterator(TemplateIterator):
             from AnimalPose.utils.loss_utils import percentage_correct_keypoints, heatmaps_to_coords
             from edflow.data.util import adjust_support
 
-            pck, pck_joints = percentage_correct_keypoints(kwargs["kps"], heatmaps_to_coords(torch2numpy(predictions))[0],
-                                               self.config['pck_alpha'])
+            # pck, pck_joints = percentage_correct_keypoints(kwargs["kps"], heatmaps_to_coords(torch2numpy(predictions))[0],
+            #                                   self.config['pck_alpha'])
+            PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
+            if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
+
+            coords = heatmaps_to_coords(torch2numpy(predictions))[0]
+            pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t) for t in PCK_THRESH}
             logs = {
                 "images": {
                     "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
                     "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
                     "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
                     "gt_stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
-                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), torch2numpy(predictions)),
+                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1),
+                                                    torch2numpy(predictions)),
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
-                    f"PCK@{self.config['pck_alpha']}": pck,
+                    f"PCK@{self.config['pck_alpha']}": pck[self.config['pck_alpha']][0],
                 },
                 "figures": {
                     "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
@@ -121,20 +126,36 @@ class Iterator(TemplateIterator):
             if self.config["losses"]["L2_kpt"]:
                 logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
 
-            for idx, val in enumerate(pck_joints):
-                logs["scalars"][f"PCK@{self.config['pck_alpha']}_{self.dataset.get_idx_parts(idx)}"] = val
-
             # Add left and right
-            def accumulate_side(idx, val, side="L"):
-                if side in self.dataset.get_idx_parts(idx):
-                    try:
-                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] += val
-                    except:
-                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] = val
+            def accumulate_side(index, value, side="L"):
+                """
+                Accumulates PCK parts from the left or right side of the animal.
+                Args:
+                    index:
+                    value:
+                    side:
 
-            for idx, val in enumerate(pck_joints):
-                accumulate_side(idx, val, "L")
-                accumulate_side(idx, val, "R")
+                Returns:
+
+                """
+                if side in self.dataset.get_idx_parts(index):
+                    try:
+                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] += value
+                    except:
+                        logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] = value
+
+            for key, val in pck.items():
+                # val[0] is the mean pck
+                # val[1] contains the values for each part
+                # logs["scalars"][f"PCK@_{key}"][f"PCK@{self.config['pck_alpha']}_{self.dataset.get_idx_parts(idx)}"] = val
+                logs["scalars"][f"PCK@_{key}"] = val[0] # get mean value for pck at given threshold
+                for idx, part in enumerate(val[1]):
+                    logs["scalars"][f"PCK@_{key}__{self.dataset.get_idx_parts(idx)}"] = part
+
+
+            #for idx, val in enumerate():
+            #    accumulate_side(idx, val, "L")
+            #    accumulate_side(idx, val, "R")
 
             return logs
 
