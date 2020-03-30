@@ -1,13 +1,14 @@
 iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
-batch_size: 32
+batch_size: 16 # 32 on quattro
 num_steps: 50001
 lr: 0.0001
 cuda: true  # False -> use GPU
 ckpt_freq: 300
 #Training methods
-# Encoder pretrained
+# Encoder pretrained by torchvision
 pretrained: True
+# TODO: Add pretrained for animals encdec
 resnet_type: 152 #50,101,152
 encoder_latent_dim: 256
 decoder_latent_dim: 256

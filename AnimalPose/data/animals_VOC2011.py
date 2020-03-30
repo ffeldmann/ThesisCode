@@ -9,36 +9,37 @@ from AnimalPose.data.util import make_heatmaps, Rescale, crop
 from edflow.data.util import adjust_support
 
 animal_class = {"cats": 0,
-               "dogs": 1,
-               "sheeps": 2,
-               "cows": 3,
-               "horses": 4,
-               }
+                "dogs": 1,
+                "sheeps": 2,
+                "cows": 3,
+                "horses": 4,
+                }
 
 parts = {
-            "L_Eye": 0,
-            "R_Eye": 1,
-            "Nose": 2,
-            "L_EarBase": 3,
-            "R_EarBase": 4,
-            "R_F_Elbow": 5,
-            "L_F_Paw": 6,
-            "R_F_Paw": 7,
-            "Throat": 8,
-            "L_F_Elbow": 9,
-            "Withers": 10,
-            "TailBase": 11,
-            "L_B_Paw": 12,
-            "R_B_Paw": 13,
-            "L_B_Elbow": 14,
-            "R_B_Elbow": 15,
-            "L_F_Knee": 16,
-            "R_F_Knee": 17,
-            "L_B_Knee": 18,
-            "R_B_Knee": 19,
-        }
+    "L_Eye": 0,
+    "R_Eye": 1,
+    "Nose": 2,
+    "L_EarBase": 3,
+    "R_EarBase": 4,
+    "R_F_Elbow": 5,
+    "L_F_Paw": 6,
+    "R_F_Paw": 7,
+    "Throat": 8,
+    "L_F_Elbow": 9,
+    "Withers": 10,
+    "TailBase": 11,
+    "L_B_Paw": 12,
+    "R_B_Paw": 13,
+    "L_B_Elbow": 14,
+    "R_B_Elbow": 15,
+    "L_F_Knee": 16,
+    "R_F_Knee": 17,
+    "L_B_Knee": 18,
+    "R_B_Knee": 19,
+}
 
 idx_to_part = {v: k for k, v in parts.items()}
+
 
 class AnimalVOC2011(MetaDataset):
     def __init__(self, config):
@@ -65,7 +66,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.aug_factor = 0.5
         if self.augmentation:
             self.seq = iaa.Sequential([
-                iaa.Sometimes(self.aug_factor,iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
+                iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
                 iaa.Sometimes(self.aug_factor, iaa.SaltAndPepper(0.01, per_channel=False)),
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
@@ -86,7 +87,6 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.Clouds()),
                 iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
-
 
         self.joints = [
             [2, 0],  # Nose - L_Eye
@@ -124,6 +124,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
     def get_parts(self):
         return parts
+
     def get_idx_parts(self, idx):
         reverse_list = {v: k for k, v in parts.items()}
         return reverse_list[idx]
@@ -138,7 +139,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         """
         example = super().get_example(idx)
         image, keypoints, bboxes = example["frames"](), self.labels["kps"][idx], self.labels["bboxes"][idx]
-        #store which keypoints are not present in the dataset
+        # store which keypoints are not present in the dataset
         zero_mask_x = np.where(keypoints[:, 0] <= 0)
         zero_mask_y = np.where(keypoints[:, 1] <= 0)
         # need uint 8 for augmentation methods
@@ -168,7 +169,6 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         else:
             example["inp"] = adjust_support(image, "0->1")
 
-
         example["kps"] = keypoints
         example["targets"] = adjust_support(make_heatmaps(example["inp"], keypoints, sigma=self.sigma), "0->1")
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
@@ -180,6 +180,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 class AnimalVOC2011_Train(AnimalVOC2011_Abstract):
     def __init__(self, config):
         super().__init__(config, mode="train")
+
 
 class AnimalVOC2011_Validation(AnimalVOC2011_Abstract):
     def __init__(self, config):

@@ -132,6 +132,16 @@ class MSELossInstances(torch.nn.MSELoss):
 
 
 def percentage_correct_keypoints(keypoints, predictions, alpha=0.1):
+    """
+
+    Args:
+        keypoints:
+        predictions:
+        alpha:
+
+    Returns: pck mean, pck per joint
+
+    """
     keypoints = torch.from_numpy(keypoints)
     predictions = torch.from_numpy(predictions)
     batch_size = keypoints.size(0)
