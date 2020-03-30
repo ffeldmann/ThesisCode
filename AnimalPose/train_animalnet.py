@@ -66,23 +66,20 @@ class Iterator(TemplateIterator):
         is_train = self.get_split() == "train"
         model.train(is_train)
 
-        # prepare inputs
-        # self.prepare_inputs_inplace(kwargs)
-
         # TODO need (batch_size, channel, width, height)
-        # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
+        inputs0 = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
+        inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
         # compute model
         if self.encoder2:
-            predictions = model(inputs, inputs) # TODO
+            predictions = model(inputs0, inputs1)
         else:
-            predictions = model(inputs)
+            predictions = model(inputs0)
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        losses = self.criterion(kwargs["inp"].transpose(0,3,1,2), predictions.cpu())
+        losses = self.criterion(kwargs["inp0"].transpose(0,3,1,2), predictions.cpu())
 
         def train_op():
             before = time.time()
@@ -96,7 +93,8 @@ class Iterator(TemplateIterator):
             from edflow.data.util import adjust_support
             logs = {
                 "images": {
-                    "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
+                    "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1"),
+                    "image_input_1": adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1"),
                     "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1),"-1->1"),
                 },
                 "scalars": {
