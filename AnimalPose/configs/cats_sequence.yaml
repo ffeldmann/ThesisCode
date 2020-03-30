@@ -1,0 +1,3 @@
+dataset: AnimalPose.data.Animal_Sequence_Train
+validation_dataset: AnimalPose.data.Animal_Sequence_Validation
+dataroot: 'animals/cats_meta'
