@@ -6,6 +6,8 @@ from AnimalPose.utils.loss_utils import heatmaps_to_coords
 
 def plot_pred_figure(images, predictions):
     """
+    Remember to clip output numpy array to [0, 255] range and cast it to uint8.
+    Otherwise matplot.pyplot.imshow would show weird results.
     Args:
         images:
         predictions:
@@ -18,7 +20,7 @@ def plot_pred_figure(images, predictions):
         fig.add_subplot(4, 2, idx + 1)
         fig.suptitle('Input, Prediction')
         plt.title(f"{idx_to_animal[predictions[idx]]}")
-        plt.imshow(images[idx].cpu().numpy().transpose(1, 2, 0))
+        plt.imshow(adjust_support(images[idx].cpu().numpy().transpose(1, 2, 0), "0->1"))
         plt.tight_layout()
 
     return fig
@@ -26,7 +28,8 @@ def plot_pred_figure(images, predictions):
 
 def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords):
     """
-
+    Remember to clip output numpy array to [0, 255] range and cast it to uint8.
+     Otherwise matplot.pyplot.imshow would show weird results.
     Args:
         inputs:
         targets:

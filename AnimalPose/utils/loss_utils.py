@@ -7,6 +7,30 @@ def heatmap_loss(targets, predictions):
     crit = torch.nn.MSELoss()#reduction="sum")
     return crit(torch.from_numpy(targets), predictions)
 
+class MSELossInstances(torch.nn.MSELoss):
+    """MSELoss, which reduces to instances of the batch
+    """
+
+    def __init__(self):
+        super().__init__(reduction="none")
+
+    def forward(self, image: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        super_result = super().forward(image, target)
+        reduced = super_result.mean(axis=(1, 2, 3))
+        return reduced
+
+
+class L1LossInstances(torch.nn.L1Loss):
+    """L1Loss, which reduces to instances of the batch
+    """
+
+    def __init__(self):
+        super().__init__(reduction="none")
+
+    def forward(self, image: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        super_result = super().forward(image, target)
+        reduced = super_result.mean(axis=(1, 2, 3))
+        return reduced
 
 def heatmaps_to_coords(heatmaps, thresh: float = 0.0):
     """
@@ -169,7 +193,7 @@ def percentage_correct_keypoints(keypoints, predictions, alpha=0.1):
         p_pred[~mask, :] = 0
         num_pts[idx] = N_pts
         #point_distance = torch.pow(torch.sum(torch.pow(p_src[, :N_pts] - p_pred[:, :N_pts], 2), 0), 0.5)
-        point_distance = torch.pow(torch.sum(torch.pow(p_src - p_pred, 2), 1), 0.5)
+        point_distance = torch.pow(torch.sum(torch.pow(p_src - p_pred, 2), 1), 0.5) # 0.5 means squared!!
 
         L_pck_mat = L_pck.expand_as(point_distance)  # val -> val, val
         correct_points = torch.le(point_distance, L_pck_mat * alpha)

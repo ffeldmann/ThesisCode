@@ -9,7 +9,7 @@ from AnimalPose.data.util import heatmap_to_image, make_stickanimal
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
 from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
-
+import torchvision
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -17,7 +17,9 @@ class Iterator(TemplateIterator):
         # loss and optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr"])
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
-
+        self.mean = [0.485, 0.456, 0.406]
+        self.std = [0.229, 0.224, 0.225]
+        self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
         if self.cuda:
             self.model.cuda()
         # hooks
@@ -74,7 +76,7 @@ class Iterator(TemplateIterator):
         inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
-
+        inputs = self.normalize(inputs)
         # compute model
         predictions = model(inputs)
         # compute loss
@@ -144,19 +146,11 @@ class Iterator(TemplateIterator):
                     except:
                         logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] = value
 
-            for key, val in pck.items():
-                # val[0] is the mean pck
-                # val[1] contains the values for each part
-                # logs["scalars"][f"PCK@_{key}"][f"PCK@{self.config['pck_alpha']}_{self.dataset.get_idx_parts(idx)}"] = val
+            if self.config["pck_multi"]:
+                for key, val in pck.items():
                 logs["scalars"][f"PCK@_{key}"] = val[0] # get mean value for pck at given threshold
                 for idx, part in enumerate(val[1]):
-                    logs["scalars"][f"PCK@_{key}__{self.dataset.get_idx_parts(idx)}"] = part
-
-
-            #for idx, val in enumerate():
-            #    accumulate_side(idx, val, "L")
-            #    accumulate_side(idx, val, "R")
-
+                    logs["scalars"][f"PCK@_{key}_{self.dataset.get_idx_parts(idx)}"] = part
             return logs
 
         def eval_op():

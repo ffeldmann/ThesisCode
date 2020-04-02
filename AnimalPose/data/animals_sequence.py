@@ -53,7 +53,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
-        self.sc = SequenceDataset(Animal_Sequence(config), 2)
+        self.sc = SequenceDataset(Animal_Sequence(config), 2, step=config["sequence_step_size"])
         # works if dataroot like "VOC2011/cats_meta"
         # TODO PROBABLY NOT CORRECT HERE
         self.animal = config["dataroot"].split("/")[1].split("_")[0]

@@ -11,7 +11,7 @@ from AnimalPose.data.util import heatmap_to_image, make_stickanimal
 from AnimalPose.hooks.model import RestorePretrainedSDCHook
 from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
-
+import torchvision
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -19,7 +19,9 @@ class Iterator(TemplateIterator):
         # loss and optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr"])
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
-
+        self.mean = [0.485, 0.456, 0.406]
+        self.std = [0.229, 0.224, 0.225]
+        self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std, inplace=True)
         if self.cuda:
             self.model.cuda()
         # hooks
@@ -75,7 +77,8 @@ class Iterator(TemplateIterator):
         inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
-
+        # normalization done inplace
+        #for inp in inputs: self.normalize(inp)
         # animal labels
         labels = torch.from_numpy(kwargs["animal_class"]).to("cuda")
         # compute model
@@ -88,6 +91,7 @@ class Iterator(TemplateIterator):
         # Compute accuracy for batch
         corrects = torch.sum(preds == labels.data)
         accuracy = corrects.double() / self.config["batch_size"]
+
 
         def train_op():
             before = time.time()

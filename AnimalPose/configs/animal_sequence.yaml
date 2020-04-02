@@ -9,8 +9,5 @@ augmentation: False
 train_size: 0.8
 random_state: 42
 pck_alpha: 0.5
-load_animal_pretrained:
-    active: True
-    #encoder_path: "load_weights/classification_PT_NOCROP_152.pt"
-    encoder_path: "load_weights/EED_encoder_decoder.pt"
-    decoder_path: "load_weights/EED_encoder_decoder.pt"
+pck_multi: False
+sequence_step_size: 2 # Steps to be taken from one frame to another

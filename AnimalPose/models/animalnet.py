@@ -3,29 +3,37 @@ import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms
 import torch
+from edflow.custom_logging import get_logger
 
 from collections import OrderedDict
-class AnimalEncoder(nn.Module):
-    def __init__(self, config):
-        super(AnimalEncoder, self).__init__()
-        model = getattr(models, "resnet" + str(config.get("resnet_type", "50")))(
-            pretrained=config.get("pretrained", False))
-        if config["load_animal_pretrained"]["active"]:
-            state = torch.load(f"{config['load_animal_pretrained']['encoder_path']}")
 
+class AnimalEncoder(nn.Module):
+    def __init__(self, config, variational):
+        super(AnimalEncoder, self).__init__()
+        self.variational = variational
+
+        self.logger = get_logger("Encoder")
+        self.model = getattr(models, "resnet" + str(config.get("resnet_type", "50")))(
+            pretrained=config.get("pretrained", False))
+        if config["load_encoder_pretrained"]["active"]:
+            print(f"Loading weights for Encoder from {config['load_encoder_pretrained']['path']}.")
+            state = torch.load(f"{config['load_encoder_pretrained']['path']}")
             try:
-                model.fc = nn.Linear(model.fc.in_features, config["encoder_latent_dim"])
+                self.model.fc = nn.Linear(state["model"]["encoder_x1.model.fc.weight"].shape[1],
+                                     state["model"]["encoder_x1.model.fc.weight"].shape[0])
                 new_state_dict = OrderedDict()
                 for k, v in state["model"].items():
                     if k.startswith("encoder_"):
-                        name = k[11:].replace("model.", "")  # remove `encoder_{x1,x2}.`
+                        # remove `encoder_{x1,x2}.`
+                        name = k.replace("encoder_x1.", "").replace("encoder_x2.", "").replace("model.", "")
                         new_state_dict[name] = v
-                model.load_state_dict(new_state_dict)
-            except:
-
+                self.model.load_state_dict(new_state_dict)
+                self.model.fc = nn.Linear(self.model.fc.in_features, config["encoder_latent_dim"])
+            except Exception as exc:
+                print(exc)
                 new_state_dict = OrderedDict()
                 for k, v in state["model"].items():
-                    name = k[6:]  # remove `model.`
+                    name = k.replace("model.", "")  # remove `model.`
                     new_state_dict[name] = v
 
                 # Overrides default last layer with the shape of the pretrained
@@ -33,13 +41,32 @@ class AnimalEncoder(nn.Module):
                 # It will be overwritten in the net step anyways.
                 in_features = new_state_dict["fc.weight"].shape[1]
                 classes = new_state_dict["fc.weight"].shape[0]
-                model.fc = nn.Linear(in_features, classes)
-                model.load_state_dict(new_state_dict)
-        model.fc = nn.Linear(model.fc.in_features, config["encoder_latent_dim"])
-        self.model = model
+                self.model.fc = nn.Linear(in_features, classes)
+                self.model.load_state_dict(new_state_dict)
+        # save fc layer dimensions
+        in_features = self.model.fc.in_features
+        if self.variational:
+            self.model = nn.Sequential(*list(self.model.children())[:-1])
+            # TODO why do i need to explicitly increase the size in_featres * batch_size??
+            self.fc1 = nn.Linear(in_features, config["encoder_latent_dim"])
+            self.fc2 = nn.Linear(in_features, config["encoder_latent_dim"])
+        else:
+            self.model.fc = nn.Linear(in_features, config["encoder_latent_dim"])
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
 
     def forward(self, x):
-        return self.model(x)
+        enc = self.model(x)
+        if self.variational:
+            enc = self.model(x)
+            mu = self.fc1(enc.squeeze())
+            logvar = self.fc2(enc.squeeze())
+            enc = self.reparameterize(mu, logvar)
+            return enc, mu, logvar
+        return enc
 
 
 class AnimalDecoder(nn.Module):
@@ -102,15 +129,16 @@ class AnimalDecoder(nn.Module):
         )
         self.model.add_module(n + s1, nn.Tanh())
 
-        if config["load_animal_pretrained"]["active"]:
-            state = torch.load(f"{config['load_animal_pretrained']['decoder_path']}")
+        if config["load_decoder_pretrained"]["active"]:
+            model_dict = self.model.state_dict()
+            state = torch.load(f"{config['load_decoder_pretrained']['path']}")
             new_state_dict = OrderedDict()
             for k, v in state["model"].items():
                 if k.startswith("decoder"):
-                    name = k[8:].replace("model.", "")  # remove `decoder.`
+                    name = k.replace("decoder.", "").replace("model.", "")  # remove `decoder.`
                     new_state_dict[name] = v
+            new_state_dict["b00.weight"] = model_dict["b00.weight"]
             self.model.load_state_dict(new_state_dict)
-            #self.model.load_state_dict(state["model"])
 
     def forward(self, x):
         return self.model(x)
@@ -143,20 +171,27 @@ class AnimalNet(nn.Module):
      shape (3 x H x W), where H and W are expected to be at least 224. The images have to be loaded in to
      a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
     """
-    #normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
 
     def __init__(self, config):
         super(AnimalNet, self).__init__()
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
-        self.encoder_x1 = AnimalEncoder(config)
+        # self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
+
+        self.variational = True if config["variational"]["active"] else False
+        self.encoder_x1 = AnimalEncoder(config, variational=self.variational)
         if config["encoder_2"]:
-            self.encoder_x2 = AnimalEncoder(config)
+            self.encoder_x2 = AnimalEncoder(config, variational=False)
         self.decoder = AnimalDecoder(config)
 
     def forward(self, x1, x2=None):
-        x1 = self.encoder_x1(x1)
+        # x1 = self.normalize(x1)
+        if self.variational:
+            x1, mu, logvar = self.encoder_x1(x1)
+        else:
+            x1 = self.encoder_x1(x1)
         if x2 != None:
+            # x2 = self.normalize(x2)
             x2 = self.encoder_x2(x2)
             x1x2 = torch.cat((x1, x2), dim=1)
             # unsqueeze x1 adding [B, C, 1,1]
@@ -164,7 +199,10 @@ class AnimalNet(nn.Module):
             return self.decoder(x1x2)
         # unsqueeze x1 adding [B, C, 1,1]
         x1 = x1.unsqueeze(-1).unsqueeze(-1)
-        return self.decoder(x1)
+        if self.variational:
+            return self.decoder(x1), mu, logvar
+        else:
+            return self.decoder(x1)
 
 # class ConvBlock(nn.Module):
 #     """

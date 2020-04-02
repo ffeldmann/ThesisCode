@@ -7,6 +7,7 @@ from edflow.data.dataset_mixin import DatasetMixin
 import sklearn.model_selection
 from AnimalPose.data.util import make_heatmaps, Rescale, crop
 from edflow.data.util import adjust_support
+import torchvision
 
 animal_class = {"cats": 0,
                 "dogs": 1,
@@ -58,6 +59,7 @@ class AnimalVOC2011(MetaDataset):
 class AnimalVOC2011_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
+
         self.sc = AnimalVOC2011(config)
         self.train = int(config["train_size"] * len(self.sc))
         self.test = 1 - self.train
@@ -66,7 +68,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.aug_factor = 0.5
         if self.augmentation:
             self.seq = iaa.Sequential([
-                iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
+                #iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
                 iaa.Sometimes(self.aug_factor, iaa.SaltAndPepper(0.01, per_channel=False)),
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
@@ -83,9 +85,9 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 # result with the original with random alpha. I.e. remove
                 # colors with varying strengths.
                 iaa.Grayscale(alpha=(0.0, 1.0)),
-                iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
-                iaa.Sometimes(self.aug_factor, iaa.Clouds()),
-                iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
+                #iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
+                #iaa.Sometimes(self.aug_factor, iaa.Clouds()),
+                #iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
 
         self.joints = [
@@ -161,16 +163,16 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():
             if self.data.data.config["as_grey"]:
-                example["inp"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
+                example["inp0"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
                 assert (self.data.data.config["n_channels"] == 1), (
                     "n_channels should be 1, got {}".format(self.data.data.config["n_channels"]))
             else:
-                example["inp"] = adjust_support(image, "0->1")
+                example["inp0"] = adjust_support(image, "0->1")
         else:
-            example["inp"] = adjust_support(image, "0->1")
+            example["inp0"] = adjust_support(image, "0->1")
 
         example["kps"] = keypoints
-        example["targets"] = adjust_support(make_heatmaps(example["inp"], keypoints, sigma=self.sigma), "0->1")
+        example["targets"] = adjust_support(make_heatmaps(example["inp0"], keypoints, sigma=self.sigma), "0->1")
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
         # example["joints"] = self.joints
         example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
