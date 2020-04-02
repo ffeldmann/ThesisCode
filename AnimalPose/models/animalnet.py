@@ -196,7 +196,10 @@ class AnimalNet(nn.Module):
             x1x2 = torch.cat((x1, x2), dim=1)
             # unsqueeze x1 adding [B, C, 1,1]
             x1x2 = x1x2.unsqueeze(-1).unsqueeze(-1)
-            return self.decoder(x1x2)
+            if self.variational:
+                return self.decoder(x1x2), mu, logvar
+            else:
+                return self.decoder(x1x2)
         # unsqueeze x1 adding [B, C, 1,1]
         x1 = x1.unsqueeze(-1).unsqueeze(-1)
         if self.variational:

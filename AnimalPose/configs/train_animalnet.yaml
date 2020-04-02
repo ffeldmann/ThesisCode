@@ -20,7 +20,7 @@ load_decoder_pretrained:
 resnet_type: 18 #18, 50,101,152
 encoder_latent_dim: 256
 decoder_latent_dim: 256
-encoder_2: False
+encoder_2: True
 # True sets the encoder_1 variational
 variational:
     active: True
