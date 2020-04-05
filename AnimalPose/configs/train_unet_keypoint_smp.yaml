@@ -1,0 +1,37 @@
+iterator: AnimalPose.train_keypoint_predictor.Iterator
+model: AnimalPose.models.UNet_SMP
+batch_size: 8
+num_steps: 50001
+lr: 0.001
+cuda: true  # False -> use GPU
+ckpt_freq: 1000
+pretrained: True
+adjust_learning_rate: True
+# Heatmap
+hm:
+  # we consider a keypoint to be a keypoint only above thresh
+  thresh: 0.8
+
+# PCK
+pck:
+    thresh: 0.5
+    pck_multi: True
+    type: "object" # "object" or "image"
+
+# Losses
+losses:
+    L1: True
+    L2: True
+    #TODO
+    KL: False
+    perceptual: False
+    perceptual_network: "vgg" # alex, squeeze or vgg
+    perceptual_weight: 1.0
+# logging
+integrations:
+  git:
+    active: False
+  wandb:
+    active: True
+  tensorboard:
+    active: True

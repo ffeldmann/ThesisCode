@@ -1,4 +1,4 @@
-iterator: AnimalPose.train.Iterator
+iterator: AnimalPose.train_keypoint_predictor.Iterator
 model: AnimalPose.models.UNet
 batch_size: 8
 num_steps: 500001
@@ -8,12 +8,14 @@ cuda: true  # False -> use GPU
 
 #Training methods
 #pretrained_checkpoint:
-
+# PCK
+pck:
+    type: "object" # "object" or "image"
+    thresh: 0.5
 # Losses
 losses:
     L2: true # TODO
     L2_kpt: true # TODO
-
 
 # logging
 integrations:
@@ -21,9 +23,5 @@ integrations:
     active: true
   tensorboard:
     active: true
-#  wandb:
-#    active: false
-#    handlers:
-#      - scalars
-
-
+  wandb:
+    active: true

@@ -5,11 +5,16 @@ import torch.nn.functional
 import torch.optim as optim
 from edflow import TemplateIterator
 
-from AnimalPose.data.util import heatmap_to_image, make_stickanimal
-from AnimalPose.hooks.model import RestorePretrainedSDCHook
-from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
+from AnimalPose.data.util import make_stickanimal
+from AnimalPose.utils.image_utils import heatmaps_to_coords, get_color_heatmaps
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
-import torchvision
+from AnimalPose.utils.log_utils import plot_input_target_keypoints
+from AnimalPose.utils.loss_utils import percentage_correct_keypoints
+from edflow.data.util import adjust_support
+from AnimalPose.hooks.training_hooks import AdjustLearningRate
+from AnimalPose.utils.loss_utils import MSELossInstances, L1LossInstances
+from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
+
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -19,16 +24,16 @@ class Iterator(TemplateIterator):
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
-        self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
+        # Initialize Loss functions
+        self.mse_instance = MSELossInstances()
+        self.l1_instance = L1LossInstances()
+        # self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
         if self.cuda:
             self.model.cuda()
         # hooks
-        if "pretrained_checkpoint" in self.config.keys():
+        if self.config["adjust_learning_rate"]:
             self.hooks.append(
-                RestorePretrainedSDCHook(
-                    pretrained_checkpoint=self.config["pretrained_checkpoint"],
-                    model=self.model,
-                )
+                AdjustLearningRate(self.config, self.optimizer)
             )
 
     def save(self, checkpoint_path):
@@ -44,12 +49,17 @@ class Iterator(TemplateIterator):
         self.optimizer.load_state_dict(state["optimizer"])
 
     def criterion(self, targets, predictions, gt_coords):
+        # make sure everything is a torch tensor
+        targets = sure_to_torch(targets)
+        predictions = sure_to_torch(predictions)
+
         # calculate losses
         instance_losses = {}
         if self.config["losses"]["L2"]:
-            instance_losses["heatmap_loss"] = heatmap_loss(targets, predictions)
-        if self.config["losses"]["L2_kpt"]:
-            instance_losses["keypoint_loss"] = keypoint_loss(predictions, gt_coords, True)
+            instance_losses["L2"] = self.mse_instance(targets, predictions)
+        if self.config["losses"]["L1"]:
+            instance_losses["L1"] = self.l1_instance(targets, predictions)
+
         instance_losses["total"] = sum(
             [
                 instance_losses[key]
@@ -67,16 +77,10 @@ class Iterator(TemplateIterator):
         is_train = self.get_split() == "train"
         model.train(is_train)
 
-        # prepare inputs
-        # self.prepare_inputs_inplace(kwargs)
-
-        # TODO need (batch_size, channel, width, height)
         # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
-        # inputs now
-        # (batch_size, channel, width, height)
-        inputs = self.normalize(inputs)
+        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
+        # inputs now (batch_size, channel, width, height)
         # compute model
         predictions = model(inputs)
         # compute loss
@@ -84,31 +88,25 @@ class Iterator(TemplateIterator):
         losses = self.criterion(kwargs["targets"], predictions.cpu(), kwargs["kps"])
 
         def train_op():
-            before = time.time()
             self.optimizer.zero_grad()
             losses["batch"]["total"].backward()
             self.optimizer.step()
-            # if retrieve(self.config, "debug_timing", default=False):
-            #    self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
-            from AnimalPose.utils.log_utils import plot_input_target_keypoints
-            from AnimalPose.utils.loss_utils import percentage_correct_keypoints, heatmaps_to_coords
-            from edflow.data.util import adjust_support
 
-            # pck, pck_joints = percentage_correct_keypoints(kwargs["kps"], heatmaps_to_coords(torch2numpy(predictions))[0],
-            #                                   self.config['pck_alpha'])
             PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
             if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
 
-            coords = heatmaps_to_coords(torch2numpy(predictions))[0]
-            pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t) for t in PCK_THRESH}
+            coords = heatmaps_to_coords(predictions, thresh=self.config["hm"]["thresh"])
+            pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
+                   PCK_THRESH}
             logs = {
                 "images": {
-                    "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": heatmap_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
-                    "targets": heatmap_to_image(kwargs["targets"]).transpose(0, 2, 3, 1),
-                    "gt_stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
+                    # Image input not needed, because stickanimal is printed on input image
+                    #"image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
+                    "outputs": adjust_support(get_color_heatmaps(predictions), "-1->1").transpose(0, 2, 3, 1),
+                    "targets": adjust_support(get_color_heatmaps(kwargs["targets"]), "-1->1").transpose(0, 2, 3, 1),
+                    "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
                     "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1),
                                                     torch2numpy(predictions)),
                 },
@@ -124,9 +122,9 @@ class Iterator(TemplateIterator):
                 }
             }
             if self.config["losses"]["L2"]:
-                logs["scalars"]["heatmap_loss"] = losses["batch"]["heatmap_loss"]
-            if self.config["losses"]["L2_kpt"]:
-                logs["scalars"]["keypoint_loss"]: losses["batch"]["keypoint_loss"]
+                logs["scalars"]["L2"] = losses["batch"]["L2"]
+            if self.config["losses"]["L1"]:
+                logs["scalars"]["L1"] = losses["batch"]["L1"]
 
             # Add left and right
             def accumulate_side(index, value, side="L"):
@@ -146,9 +144,10 @@ class Iterator(TemplateIterator):
                     except:
                         logs["scalars"][f"PCK@{self.config['pck_alpha']}_{side}side"] = value
 
-            if self.config["pck_multi"]:
+            if self.config["pck"]["pck_multi"]:
                 for key, val in pck.items():
-                logs["scalars"][f"PCK@_{key}"] = val[0] # get mean value for pck at given threshold
+                    # get mean value for pck at given threshold
+                    logs["scalars"][f"PCK@_{key}"] = val[0]
                 for idx, part in enumerate(val[1]):
                     logs["scalars"][f"PCK@_{key}_{self.dataset.get_idx_parts(idx)}"] = part
             return logs

@@ -1,4 +1,4 @@
-iterator: AnimalPose.train.Iterator
+iterator: AnimalPose.train_keypoint_predictor.Iterator
 model: AnimalPose.models.Deeplabv3Resnet101_Hub
 batch_size: 8
 num_steps: 500001

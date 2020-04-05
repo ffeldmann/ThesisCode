@@ -174,6 +174,8 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         example["kps"] = keypoints
         example["targets"] = adjust_support(make_heatmaps(example["inp0"], keypoints, sigma=self.sigma), "0->1")
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
+        # Workaround for the encoder decoder to just see how vae is doing
+        example["inp1"] = example["inp0"]
         # example["joints"] = self.joints
         example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
         return example

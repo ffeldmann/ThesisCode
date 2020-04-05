@@ -6,9 +6,7 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.data.util import heatmap_to_image, make_stickanimal
-from AnimalPose.hooks.model import RestorePretrainedSDCHook
-from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss, MSELossInstances
+from AnimalPose.utils.loss_utils import MSELossInstances, L1LossInstances
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 
@@ -31,13 +29,13 @@ class Iterator(TemplateIterator):
         if self.cuda:
             self.model.cuda()
         # hooks
-        if "pretrained_checkpoint" in self.config.keys():
-            self.hooks.append(
-                RestorePretrainedSDCHook(
-                    pretrained_checkpoint=self.config["pretrained_checkpoint"],
-                    model=self.model,
-                )
-            )
+        # if "pretrained_checkpoint" in self.config.keys():
+        #     self.hooks.append(
+        #         RestorePretrainedSDCHook(
+        #             pretrained_checkpoint=self.config["pretrained_checkpoint"],
+        #             model=self.model,
+        #         )
+        #     )
 
     def save(self, checkpoint_path):
         state = {
@@ -65,7 +63,7 @@ class Iterator(TemplateIterator):
             # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
             # https://arxiv.org/abs/1312.6114
             # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-            RE = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
+            RE = torch.abs(torch.from_numpy(targets).to(self.device) - predictions)
             KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
             instance_losses["KL"] = RE + KLD
 
@@ -135,7 +133,7 @@ class Iterator(TemplateIterator):
                 },
             }
             if self.encoder_2:
-                logs["images"]["image_input_1"]: adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1")
+                logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1")
             if self.config["losses"]["L2"]:
                 logs["scalars"]["L2_loss"] = losses["batch"]["L2_loss"]
             if self.config["losses"]["perceptual"]:

@@ -1,0 +1,33 @@
+iterator: AnimalPose.train_keypoint_predictor.Iterator
+model: AnimalPose.models.UNet_hub
+batch_size: 8
+num_steps: 50001
+lr: 0.0001
+cuda: true  # False -> use GPU
+ckpt_freq: 1000
+pretrained: True
+
+# PCK
+pck:
+    thresh: 0.5
+    type: "object" # "object" or "image"
+
+# Losses
+losses:
+    L2: True # TODO
+    #TODO
+    KL: False
+    perceptual: False
+    perceptual_network: "vgg" # alex, squeeze or vgg
+    perceptual_weight: 1.0
+
+# logging
+integrations:
+  git:
+    active: False
+  wandb:
+    active: true
+  tensorboard:
+    active: true
+
+

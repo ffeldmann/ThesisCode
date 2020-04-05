@@ -7,9 +7,7 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.data.util import heatmap_to_image, make_stickanimal
-from AnimalPose.hooks.model import RestorePretrainedSDCHook
-from AnimalPose.utils.loss_utils import heatmap_loss, keypoint_loss
+from AnimalPose.hooks.training_hooks import RestorePretrainedSDCHook
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 import torchvision
 
@@ -74,7 +72,7 @@ class Iterator(TemplateIterator):
         # TODO need (batch_size, channel, width, height)
         # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp"].transpose(0, 3, 1, 2)).to("cuda")
+        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
         # normalization done inplace

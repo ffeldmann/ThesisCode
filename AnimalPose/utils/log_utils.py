@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from edflow.data.util import adjust_support
-from AnimalPose.utils.loss_utils import heatmaps_to_coords
+from AnimalPose.utils.image_utils import heatmaps_to_coords
 
 
 def plot_pred_figure(images, predictions):
@@ -22,7 +22,6 @@ def plot_pred_figure(images, predictions):
         plt.title(f"{idx_to_animal[predictions[idx]]}")
         plt.imshow(adjust_support(images[idx].cpu().numpy().transpose(1, 2, 0), "0->1"))
         plt.tight_layout()
-
     return fig
 
 
@@ -40,7 +39,7 @@ def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords):
     """
     fig = plt.figure(figsize=(10, 10))
     # heatmaps_to_coords needs [batch_size, num_joints, height, width]
-    coords, _ = heatmaps_to_coords(targets)
+    coords = heatmaps_to_coords(targets)
     for idx in range(8):
         fig.add_subplot(4, 2, idx + 1)
         fig.suptitle('Blue: GT, Red: Predicted')

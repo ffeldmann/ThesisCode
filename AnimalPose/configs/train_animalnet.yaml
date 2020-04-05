@@ -24,14 +24,15 @@ encoder_2: True
 # True sets the encoder_1 variational
 variational:
     active: True
-    beta: 10
+    kl_weight: 1
 # Losses
 losses:
-    L2: True
+    L2: False
     L2_kpt: False # TODO
     KL: True
-    perceptual: True
+    perceptual: False
     perceptual_network: "vgg" # alex, squeeze or vgg
+    perceptual_weight: 1.0
 
 # logging
 integrations:

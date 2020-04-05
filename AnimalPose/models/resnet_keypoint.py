@@ -2,12 +2,14 @@ import torch.nn as nn
 import torchvision.models as models
 
 
-class ResnetTorchVision(nn.Module):
+class ResnetTorchVisionKeypoints(nn.Module):
     def __init__(self, config):
-        super(ResnetTorchVision, self).__init__()
+        super(ResnetTorchVisionKeypoints, self).__init__()
         # resnet = resnet_fpn_backbone('resnet50', False)
         resnet = getattr(models, "resnet" + str(config.get("resnet_type", "50")))(
             pretrained=config.get("pretrained", False))
+        import pdb;
+        pdb.set_trace()
         resnet.conv1 = nn.Conv2d(config["n_channels"], 64, kernel_size=7, stride=2, padding=3,
                                  bias=False)
         nn.UpsamplingBilinear2d()
