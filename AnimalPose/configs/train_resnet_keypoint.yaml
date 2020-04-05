@@ -2,22 +2,28 @@ iterator: AnimalPose.train_keypoint_predictor.Iterator
 model: AnimalPose.models.ResnetTorchVisionKeypoints
 batch_size: 32
 num_steps: 50001
-lr: 0.0001
+lr: 0.001
 cuda: true  # False -> use GPU
-ckpt_freq: 1000
+ckpt_freq: 2000
 #Training methods
 pretrained: True
+resnet_type: 101 #50,101,152
 adjust_learning_rate: True
-resnet_type: 18 #50,101,152
+# Heatmap
+hm:
+  # we consider a keypoint to be a keypoint only above thresh
+  thresh: 0.8
 
 # PCK
 pck:
-    type: "object" # "object" or "image"
     thresh: 0.5
+    pck_multi: True
+    type: "object" # "object" or "image"
 
 # Losses
 losses:
-    L2: True # TODO
+    L1: True
+    L2: True
     #TODO
     KL: False
     perceptual: False
@@ -28,7 +34,7 @@ integrations:
   git:
     active: False
   wandb:
-    active: true
+    active: True
   tensorboard:
-    active: true
+    active: True
 

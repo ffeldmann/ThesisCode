@@ -64,8 +64,8 @@ class Animal_Sequence_Abstract(DatasetMixin):
         self.augmentation = config["augmentation"]
         self.aug_factor = 0.5
 
-        if "rescale_to" in self.config.keys():
-            self.rescale = Rescale(self.config["rescale_to"])
+        if "resize_to" in self.config.keys():
+            self.rescale = Rescale((self.config["resize_to"], self.config["resize_to"]))
         else:
             # Scaling to default size 128
             self.rescale = Rescale((128, 128))

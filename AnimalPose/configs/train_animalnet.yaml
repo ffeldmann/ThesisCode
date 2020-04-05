@@ -4,7 +4,7 @@ batch_size: 32 # 32 on quattro
 num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU
-ckpt_freq: 1000
+ckpt_freq: 2000
 #Training methods
 # Encoder pretrained by torchvision
 pretrained: False

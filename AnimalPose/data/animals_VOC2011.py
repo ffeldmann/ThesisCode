@@ -7,6 +7,7 @@ from edflow.data.dataset_mixin import DatasetMixin
 import sklearn.model_selection
 from AnimalPose.data.util import make_heatmaps, Rescale, crop
 from edflow.data.util import adjust_support
+from edflow import get_logger
 import torchvision
 
 animal_class = {"cats": 0,
@@ -47,10 +48,11 @@ class AnimalVOC2011(MetaDataset):
         super().__init__(config["dataroot"])
         self.config = config
         self.crop = crop
+        self.logger = get_logger(self)
         # works if dataroot like "VOC2011/cats_meta"
         self.animal = config["dataroot"].split("/")[1].split("_")[0]
-        if "rescale_to" in self.config.keys():
-            self.rescale = Rescale(self.config["rescale_to"])
+        if "resize_to" in self.config.keys():
+            self.rescale = Rescale((self.config["resize_to"], self.config["resize_to"]))
         else:
             # Scaling to default size 128
             self.rescale = Rescale((128, 128))

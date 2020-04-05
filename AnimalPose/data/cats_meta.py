@@ -13,8 +13,8 @@ class SingleCats(MetaDataset):
         self.config = config
         #self.append_labels = False
 
-        if "rescale_to" in self.config.keys():
-            self.rescale = Rescale(self.config["rescale_to"])
+        if "resize_to" in self.config.keys():
+            self.rescale = Rescale(self.config["resize_to"])
         else:
             # Scaling to default size 128
             self.rescale = Rescale((128, 128))
