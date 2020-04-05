@@ -9,9 +9,17 @@ class AdjustLearningRate(Hook):
         self.config = config
 
     def before_epoch(self, epoch):
-        if epoch > 5:
-            """Sets the learning rate to the initial LR decayed by 10 every 5 epochs"""
-            lr = self.config["lr"] * (0.1 ** (epoch // 5))
+        if epoch in range(3, 5):
+            """
+            Sets the learning rate to the initial LR decayed by 10 within the first 3-5 epochs
+            """
+            lr = self.config["lr"] * (0.1 ** epoch)
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = lr
-            self.logger.info(f"Decreased learning rate to {lr}")
+            self.logger.info(f"Decreased learning rate to {lr}.")
+
+        if epoch > 5:
+            lr = self.config["lr"] * (0.1 ** (epoch // 10))
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = lr
+            self.logger.info(f"Decreased learning rate to {lr}.")

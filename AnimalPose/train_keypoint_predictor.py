@@ -6,24 +6,25 @@ import torch.optim as optim
 from edflow import TemplateIterator
 
 from AnimalPose.data.util import make_stickanimal
-from AnimalPose.utils.image_utils import heatmaps_to_coords, get_color_heatmaps
+from AnimalPose.utils.image_utils import heatmaps_to_coords, apply_threshold_to_heatmaps, heatmaps_to_image
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.log_utils import plot_input_target_keypoints
 from AnimalPose.utils.loss_utils import percentage_correct_keypoints
 from edflow.data.util import adjust_support
-from AnimalPose.hooks.training_hooks import AdjustLearningRate
 from AnimalPose.utils.loss_utils import MSELossInstances, L1LossInstances
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
-
+import torchvision.transforms as transforms
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # loss and optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config["lr"])
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=10, verbose=True)
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         # Initialize Loss functions
         self.mse_instance = MSELossInstances()
         self.l1_instance = L1LossInstances()
@@ -31,10 +32,10 @@ class Iterator(TemplateIterator):
         if self.cuda:
             self.model.cuda()
         # hooks
-        if self.config["adjust_learning_rate"]:
-            self.hooks.append(
-                AdjustLearningRate(self.config, self.optimizer)
-            )
+        #if self.config["adjust_learning_rate"]:
+        #    self.hooks.append(
+        #        AdjustLearningRate(self.config, self.optimizer)
+        #    )
 
     def save(self, checkpoint_path):
         state = {
@@ -80,12 +81,21 @@ class Iterator(TemplateIterator):
         # kwargs["inp"]
         # (batch_size, width, height, channel)
         inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
+
+        #for idx, element in enumerate(inputs):
+        #    inputs[idx, :, :, :] = self.normalize(element)
         # inputs now (batch_size, channel, width, height)
         # compute model
         predictions = model(inputs)
+        import torchvision
+        torchvision.utils.save_image(predictions[0][9].squeeze(), f"test_dir/TEST_epoch{self.get_epoch_step()}.png")
+        #predictions = apply_threshold_to_heatmaps(predictions, thresh=self.config["hm"]["thresh"])
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
         losses = self.criterion(kwargs["targets"], predictions.cpu(), kwargs["kps"])
+
+        if not is_train:
+            self.scheduler.step(losses["batch"]["total"], epoch=self.get_epoch_step())
 
         def train_op():
             self.optimizer.zero_grad()
@@ -100,18 +110,20 @@ class Iterator(TemplateIterator):
             coords = heatmaps_to_coords(predictions, thresh=self.config["hm"]["thresh"])
             pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
                    PCK_THRESH}
+
             logs = {
                 "images": {
                     # Image input not needed, because stickanimal is printed on input image
                     #"image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(get_color_heatmaps(predictions), "-1->1").transpose(0, 2, 3, 1),
-                    "targets": adjust_support(get_color_heatmaps(kwargs["targets"]), "-1->1").transpose(0, 2, 3, 1),
+                    "outputs": adjust_support(heatmaps_to_image(predictions), "-1->1").transpose(0, 2, 3, 1),
+                    "targets": adjust_support(heatmaps_to_image(kwargs["targets"]), "-1->1").transpose(0, 2, 3, 1),
                     "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
                     "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1),
                                                     torch2numpy(predictions)),
                 },
                 "scalars": {
                     "loss": losses["batch"]["total"],
+                    "learning_rate": self.optimizer.state_dict()["param_groups"][0]["lr"],
                     f"PCK@{self.config['pck_alpha']}": pck[self.config['pck_alpha']][0],
                 },
                 "figures": {

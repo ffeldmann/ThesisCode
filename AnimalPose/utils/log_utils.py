@@ -44,10 +44,9 @@ def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords):
         fig.add_subplot(4, 2, idx + 1)
         fig.suptitle('Blue: GT, Red: Predicted')
         if inputs[idx].shape[-1] == 1:
-
-            plt.imshow(adjust_support(inputs[idx].squeeze(-1), "0->1"))
+            plt.imshow(adjust_support(inputs[idx].squeeze(-1), "0->255"))
         else:
-            plt.imshow(adjust_support(inputs[idx], "0->1"))
+            plt.imshow(adjust_support(inputs[idx], "0->255"))
         mask = np.ones(20).astype(bool)
         for kpt in range(0, len(coords[0])):
             if (gt_coords[idx][:, :2][kpt] == [0, 0]).all():

@@ -64,6 +64,40 @@ def get_color_heatmaps(heatmaps: np.array):
     return heat_out
 
 
+def normalize_tensor(tensor: torch.tensor):
+    """
+    Normalize tensor to 0->1
+    Args:
+        tensor:
+
+    Returns:
+
+    """
+    tensor -= tensor.min(1, keepdim=True)[0]
+    tensor /= tensor.max(1, keepdim=True)[0]
+    return tensor
+
+def apply_threshold_to_heatmaps(heatmaps: torch.tensor, thresh: float):
+    """
+
+    Args:
+        heatmaps: Tensor of shape [N, 1, H, W]
+        thresh: Threshold for a keypoint in a heatmap to be considered a heatmap
+                thresh should be in range [0,1]
+        inplace: Performs the operation inplace
+
+    Returns: Thresholded heatmap
+
+    """
+    heatmaps = normalize_tensor(heatmaps)
+    if thresh != None:
+        assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
+        # Get the indices where the values are smaller then the threshold
+        indices = heatmaps < thresh
+        # Set these values to 0
+        heatmaps[indices] = 0
+    return heatmaps
+
 def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
     """
     Get predictions from heatmaps in torch Tensor.
@@ -77,9 +111,7 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     """
     heatmaps = sure_to_torch(heatmaps)
-    # Normalize Heatmap tensor to 0->1
-    heatmaps -= heatmaps.min(1, keepdim=True)[0]
-    heatmaps /= heatmaps.max(1, keepdim=True)[0]
+    heatmaps = normalize_tensor(heatmaps)
     if thresh != None:
         assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
         # Get the indices where the values are smaller then the threshold
