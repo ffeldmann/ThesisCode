@@ -1,18 +1,18 @@
 iterator: AnimalPose.train_keypoint_predictor.Iterator
 model: AnimalPose.models.ResnetTorchVisionKeypoints
-batch_size: 16
-num_steps: 50001
+batch_size: 128
+num_steps: 20001
 lr: 0.0001
 cuda: true  # False -> use GPU
 ckpt_freq: 2000
 #Training methods
 pretrained: True
-resnet_type: 152 #50,101,152
-adjust_learning_rate: True
+resnet_type: 18 #50,101,152
+adjust_learning_rate: False
 # Heatmap
 hm:
   # we consider a keypoint to be a keypoint only above thresh
-  thresh: 0.8
+  thresh: 0.8 #TODO
 
 # PCK
 pck:

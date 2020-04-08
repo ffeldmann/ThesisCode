@@ -75,12 +75,12 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
                 iaa.Flipud(self.aug_factor),
-                iaa.Sometimes(self.aug_factor,
-                              iaa.Affine(
-                                  rotate=10,
-                                  scale=(0.5, 0.7)
-                              )
-                              ),
+                #iaa.Sometimes(self.aug_factor,
+                #              iaa.Affine(
+                #                  rotate=10,
+                #                  scale=(0.5, 0.7)
+                #              )
+                #              ),
                 iaa.Sometimes(self.aug_factor, iaa.GaussianBlur(sigma=(0, 3.0))),
                 iaa.LinearContrast((0.75, 1.5)),
                 # Convert each image to grayscale and then overlay the
@@ -173,7 +173,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             example["inp0"] = adjust_support(image, "0->1")
 
         example["kps"] = keypoints
-        example["kps_mask"] = np.array(keypoints > 0).astype(int)
+        example["kps_mask"] = np.array(keypoints[:0] > 0).astype(int) # We assume if one coord x,y is zero the keypoint is not present
         example["targets"] = make_heatmaps(example["inp0"], keypoints, sigma=self.sigma)
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
         # Workaround for the encoder decoder to just see how vae is doing

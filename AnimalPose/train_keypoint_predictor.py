@@ -55,16 +55,16 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, targets, predictions):
+    def criterion(self, targets, predictions, kps_mask):
         # make sure everything is a torch tensor
-        # targets = sure_to_torch(targets)
-        # predictions = sure_to_torch(predictions)
+        targets = sure_to_torch(targets)
+        predictions = sure_to_torch(predictions)
 
         batch_losses = {}
         if self.config["losses"]["L2"]:
-            batch_losses["L2"] = self.mse_loss(numpy2torch(targets), predictions.cpu())
+            batch_losses["L2"] = self.mse_loss(targets, predictions.cpu())
         if self.config["losses"]["JMSE"]:
-            batch_losses["JMSE"] = self.jointsmseloss(predictions.cpu(), targets)
+            batch_losses["JMSE"] = self.jointsmseloss(predictions.cpu(), targets)#, torch.from_numpy(kps_mask))
         batch_losses["total"] = sum(
             [
                 batch_losses[key]
@@ -86,7 +86,7 @@ class Iterator(TemplateIterator):
         predictions = model(inputs)
 
         # compute loss
-        losses = self.criterion(kwargs["targets"], predictions)
+        losses = self.criterion(kwargs["targets"], predictions, kwargs["kps_mask"])
 
         def train_op():
             self.optimizer.zero_grad()
@@ -121,7 +121,7 @@ class Iterator(TemplateIterator):
                 "scalars": {
                     "loss": losses["total"],
                     "learning_rate": self.optimizer.state_dict()["param_groups"][0]["lr"],
-                    f"PCK@{self.config['pck_alpha']}": pck[self.config['pck_alpha']][0],
+                    f"PCK@{self.config['pck_alpha']}": np.around(pck[self.config['pck_alpha']][0], 5),
                 },
                 "figures": {
                     "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
@@ -140,9 +140,9 @@ class Iterator(TemplateIterator):
             if self.config["pck"]["pck_multi"]:
                 for key, val in pck.items():
                     # get mean value for pck at given threshold
-                    logs["scalars"][f"PCK@_{key}"] = val[0]
+                    logs["scalars"][f"PCK@_{key}"] = np.around(val[0], 5)
                 for idx, part in enumerate(val[1]):
-                    logs["scalars"][f"PCK@_{key}_{self.dataset.get_idx_parts(idx)}"] = part
+                    logs["scalars"][f"PCK@_{key}_{self.dataset.get_idx_parts(idx)}"] = np.around(part, 5)
             return logs
 
         def eval_op():

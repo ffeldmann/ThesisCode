@@ -132,7 +132,7 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     """
     heatmaps = sure_to_torch(heatmaps)
-    #heatmaps = normalize_tensor(heatmaps)
+    #heatmaps = normalize_tensor(heatmaps) # evil if you dont clone the tensor before!
     if thresh != None:
         #TODO assert correct!
         assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"

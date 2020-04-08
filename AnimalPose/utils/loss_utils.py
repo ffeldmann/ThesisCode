@@ -120,7 +120,7 @@ def percentage_correct_keypoints(keypoints: np.array,
         # C_pts = torch.sum(correct_points)
         correct_index[idx, :] = correct_points.view(-1)
         # PCK for the image is divided by the number of valid points in GT
-        pck[idx] = torch.sum(correct_points.float()) / torch.clamp(N_pts, min=1e-6)
+        pck[idx] = torch.sum(correct_points.float()) / torch.clamp(N_pts.float(), min=1e-6)
 
     # Reduce to joint granularity
     correct_per_joint = torch.sum(correct_index, dim=0)
