@@ -98,7 +98,7 @@ class Iterator(TemplateIterator):
             PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
             if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
 
-            coords = heatmaps_to_coords(predictions, thresh=self.config["hm"]["thresh"])
+            coords = heatmaps_to_coords(predictions.clone(), thresh=self.config["hm"]["thresh"])
             pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
                    PCK_THRESH}
 
@@ -109,16 +109,14 @@ class Iterator(TemplateIterator):
 
             logs = {
                 "images": {
-                    # Image input not needed, because stickanimal is printed on input image
+                    # Image input not needed, because stick animal is printed on input image
                     # "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
-                    "first_pred": adjust_support(gridded_outputs, "-1->1"),
-                    "first_targets": adjust_support(gridded_targets, "-1->1"),
-                    "outputs": adjust_support(heatmaps_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
-                                              "-1->1", "0->1"),
+                    "first_pred": adjust_support(gridded_outputs, "-1->1", "0->1"),
+                    "first_targets": adjust_support(gridded_targets, "-1->1", "0->1"),
+                    "outputs": adjust_support(heatmaps_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                     "targets": adjust_support(heatmaps_to_image(kwargs["targets"]).transpose(0, 2, 3, 1), "-1->1"),
                     "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
-                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1),
-                                                    torch2numpy(predictions)),
+                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), predictions.clone()),
                 },
                 "scalars": {
                     "loss": losses["total"],

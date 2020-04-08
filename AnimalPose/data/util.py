@@ -1,6 +1,3 @@
-import copy
-from collections import namedtuple
-
 import cv2
 import numpy as np
 import skimage
@@ -8,6 +5,7 @@ import skimage.transform
 from edflow.data.util import adjust_support
 
 from AnimalPose.utils.image_utils import heatmaps_to_coords
+from AnimalPose.utils.tensor_utils import torch2numpy
 
 
 class Rescale(object):
@@ -115,7 +113,7 @@ def make_stickanimal(image, predictions):
     image = adjust_support(np.copy(image), "0->255").astype(np.uint8)
     if predictions.shape[-1] != 2:
         # Predictions to Keypoints
-        coords = heatmaps_to_coords(predictions)
+        coords = heatmaps_to_coords(torch2numpy(predictions))
     else:
         coords = predictions
 

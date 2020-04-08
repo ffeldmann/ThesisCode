@@ -14,9 +14,7 @@ def heatmaps_to_image(batch_heatmaps: np.ndarray):
 
     """
     # batch_heatmaps = sure_to_numpy(batch_heatmaps)
-    #batch_heatmaps = adjust_support(batch_heatmaps, "0->1")
     # https://github.com/numpy/numpy/issues/9568
-    #logger = get_logger("Heatmaps_to_image")
     np.seterr(under='ignore', invalid='ignore')
     batch, _, width, height = batch_heatmaps.shape
     images = np.sum(batch_heatmaps, axis=1).reshape(batch, 1, height, width)
@@ -26,8 +24,6 @@ def heatmaps_to_image(batch_heatmaps: np.ndarray):
     hm_max = images.max(axis=(1, 2, 3), keepdims=True)
     hm_max.clip(min=1e-6)
     images = (images - hm_min) / (hm_max - hm_min)
-    # for idx, image in enumerate(images):
-    #    images[idx, :, :, :] = adjust_support(image, support)
     return images
 
 
@@ -136,8 +132,9 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     """
     heatmaps = sure_to_torch(heatmaps)
-    heatmaps = normalize_tensor(heatmaps)
+    #heatmaps = normalize_tensor(heatmaps)
     if thresh != None:
+        #TODO assert correct!
         assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
         # Get the indices where the values are smaller then the threshold
         indices = heatmaps < thresh
