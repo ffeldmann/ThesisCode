@@ -6,7 +6,7 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.utils.loss_utils import MSELossInstances, L1LossInstances
+from AnimalPose.utils.loss_utils import MSELossInstances, VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 
@@ -20,10 +20,17 @@ class Iterator(TemplateIterator):
         self.device = "cuda" if self.cuda else "cpu"
         self.variational = self.config["variational"]["active"]
         self.encoder_2 = True if self.config["encoder_2"] else False
+        # vgg loss
+        if self.config["losses"]["vgg"]:
+            self.vggL1 = VGGLossWithL1(gpu_ids=[0],
+                                       l1_alpha=self.config["losses"]["vgg_l1_alpha"],
+                                       vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
+
         # initalize perceptual loss if possible
         if self.config["losses"]["perceptual"]:
             net = self.config["losses"]["perceptual_network"]
-            assert net in ["alex", "squeeze", "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
+            assert net in ["alex", "squeeze",
+                           "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
             self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
                 self.device)
         if self.cuda:
@@ -52,11 +59,9 @@ class Iterator(TemplateIterator):
     def criterion(self, targets, predictions, mu=None, logvar=None):
         # calculate losses
         crit = torch.nn.MSELoss()
-        mse_instance = MSELossInstances()
-        instance_losses = {}
-        # TODO: THis is not an instance loss!!!
+        batch_losses = {}
         if self.config["losses"]["L2"]:
-            instance_losses["L2_loss"] = mse_instance(torch.from_numpy(targets), predictions.cpu()).to(self.device)
+            batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
             # Reconstruction + KL divergence losses summed over all elements and batch
             # see Appendix B from VAE paper:
@@ -65,22 +70,26 @@ class Iterator(TemplateIterator):
             # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
             RE = torch.abs(torch.from_numpy(targets).to(self.device) - predictions)
             KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            instance_losses["KL"] = RE + KLD
+            batch_losses["KL"] = RE + KLD
 
         if self.config["losses"]["perceptual"]:
-            instance_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
-                                                                 predictions.to(self.device))
-        instance_losses["total"] = sum(
-            [
-                instance_losses[key]
-                for key in instance_losses.keys()
-            ]
-        )
+            batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
+                                                              predictions.to(self.device))
+        if self.config["losses"]["vgg"]:
+            batch_losses["vgg"] = self.vggL1(torch.from_numpy(targets).float().to(self.device),
+                                             predictions.to(self.device))
+        batch_losses["total"] = batch_losses["vgg"] # sum(batch_losses[key] for key in batch_losses.keys())
+        # instance_losses["total"] = sum(
+        #    [
+        #        instance_losses[key]
+        #        for key in instance_losses.keys()
+        #    ]
+        # )
 
         # reduce to batch granularity
-        batch_losses = {k: v.mean() for k, v in instance_losses.items()}
-        losses = dict(instances=instance_losses, batch=batch_losses)
-        return losses
+        # batch_losses = {k: v.mean() for k, v in instance_losses.items()}
+
+        return batch_losses
 
     def step_op(self, model, **kwargs):
         # set model to train / eval mode
@@ -116,7 +125,7 @@ class Iterator(TemplateIterator):
         def train_op():
             before = time.time()
             self.optimizer.zero_grad()
-            losses["batch"]["total"].backward()
+            losses["total"].backward()
             self.optimizer.step()
             if retrieve(self.config, "debug_timing", default=False):
                 self.logger.info("train step needed {} s".format(time.time() - before))
@@ -129,17 +138,19 @@ class Iterator(TemplateIterator):
                     "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1"),
                 },
                 "scalars": {
-                    "loss": losses["batch"]["total"],
+                    "loss": losses["total"],
                 },
             }
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1")
             if self.config["losses"]["L2"]:
-                logs["scalars"]["L2_loss"] = losses["batch"]["L2_loss"]
+                logs["scalars"]["L2_loss"] = losses["L2_loss"]
             if self.config["losses"]["perceptual"]:
-                logs["scalars"]["perceptual"] = losses["batch"]["perceptual"]
-            if self.config["losses"]["KL"] and self.variational:
-                logs["scalars"]["KL"] = losses["batch"]["KL"]
+                logs["scalars"]["perceptual"] = losses["perceptual"]
+            #if self.config["losses"]["KL"] and self.variational:
+            #    logs["scalars"]["KL"] = losses["KL"]
+            if self.config["losses"]["vgg"]:
+                logs["scalars"]["vgg"] = losses["vgg"]
             return logs
 
         def eval_op():

@@ -74,7 +74,7 @@ class AnimalDecoder(nn.Module):
         super(AnimalDecoder, self).__init__()
 
         self.latent_size = config["decoder_latent_dim"] * 2 if config["encoder_2"] else config["decoder_latent_dim"]
-        ipt_size = int(config["resize_to"].split(",")[0])  # image size
+        ipt_size = int(config["resize_to"])  # image size
         complexity = 64
         nc_out = config["n_channels"]  # output channels
         norm = "bn"

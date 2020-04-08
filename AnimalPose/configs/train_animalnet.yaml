@@ -1,6 +1,6 @@
 iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
-batch_size: 32 # 32 on quattro
+batch_size: 8 # 32 on quattro
 num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU
@@ -9,7 +9,7 @@ ckpt_freq: 2000
 # Encoder pretrained by torchvision
 pretrained: False
 load_encoder_pretrained:
-    active: True
+    active: False
     path: "load_weights/pretrained_resnet18.ckpt"
 load_decoder_pretrained:
     active: False
@@ -21,10 +21,11 @@ resnet_type: 18 #18, 50,101,152
 encoder_latent_dim: 256
 decoder_latent_dim: 256
 encoder_2: True
+
 # True sets the encoder_1 variational
 variational:
     active: True
-    kl_weight: 1
+    kl_weight: 1 # TODO
 # Losses
 losses:
     L2: False
@@ -33,6 +34,10 @@ losses:
     perceptual: False
     perceptual_network: "vgg" # alex, squeeze or vgg
     perceptual_weight: 1.0
+    #VGGL1Loss
+    vgg: True
+    vgg_l1_alpha: 1.0
+    vgg_alpha: 1.0
 
 # logging
 integrations:

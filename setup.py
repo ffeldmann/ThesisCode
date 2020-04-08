@@ -11,7 +11,7 @@ setup(
     description="Next video frame generation with optical flow prior",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/hperrot/FlowFrameGen",
+    url="https://github.com/ffeldman/AnimalPose",
     include_package_data=True,
     packages=find_packages(),
     install_requires=["numpy", "tqdm", "matplotlib", "Pillow",],

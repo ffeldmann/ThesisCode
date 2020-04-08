@@ -7,7 +7,7 @@ cuda: true  # False -> use GPU
 ckpt_freq: 2000
 #Training methods
 pretrained: True
-# Network specific
+# Hourglass Network specific
 num_stacks: 4
 num_blocks: 1
 adjust_learning_rate: False
@@ -27,6 +27,7 @@ pck:
 losses:
     L1: False
     L2: True
+    JMSE: False
     #TODO
     KL: False
     perceptual: False

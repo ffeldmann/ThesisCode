@@ -178,6 +178,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 output[f"inp{ex_idx}"] = adjust_support(image, "0->1")
 
             output[f"kps{ex_idx}"] = keypoints
+            output[f"kps_mask{ex_idx}"] = np.array(keypoints > 0).astype(int)
             output[f"targets{ex_idx}"] = adjust_support(make_heatmaps(output[f"inp{ex_idx}"], keypoints, sigma=self.sigma), "0->1")
             output[f"animal_class"] = np.array(animal_class[self.animal])
             # example["joints"] = self.joints

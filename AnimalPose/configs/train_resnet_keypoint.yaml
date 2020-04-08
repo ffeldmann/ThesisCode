@@ -7,7 +7,7 @@ cuda: true  # False -> use GPU
 ckpt_freq: 2000
 #Training methods
 pretrained: True
-resnet_type: 18 #50,101,152
+resnet_type: 152 #50,101,152
 adjust_learning_rate: True
 # Heatmap
 hm:
@@ -24,6 +24,7 @@ pck:
 losses:
     L1: False
     L2: True
+    JMSE: False
     #TODO
     KL: False
     perceptual: False

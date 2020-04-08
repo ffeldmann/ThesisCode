@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
+from edflow import get_logger
+from edflow.data.util import adjust_support
 
 
 def heatmaps_to_image(batch_heatmaps: np.ndarray):
@@ -11,21 +13,27 @@ def heatmaps_to_image(batch_heatmaps: np.ndarray):
     Returns: Batch of images containing heatmaps of shape [B, 1, H, W]
 
     """
-    batch_heatmaps = sure_to_numpy(batch_heatmaps)
+    # batch_heatmaps = sure_to_numpy(batch_heatmaps)
+    #batch_heatmaps = adjust_support(batch_heatmaps, "0->1")
     # https://github.com/numpy/numpy/issues/9568
+    #logger = get_logger("Heatmaps_to_image")
     np.seterr(under='ignore', invalid='ignore')
     batch, _, width, height = batch_heatmaps.shape
     images = np.sum(batch_heatmaps, axis=1).reshape(batch, 1, height, width)
-    hm_min = images.min(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
-    hm_max = images.max(axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
+    # assert images.max() <= batch + 0.5, "Maximum value cannot be possible, something is wrong."
+
+    hm_min = images.min(axis=(1, 2, 3), keepdims=True)
+    hm_max = images.max(axis=(1, 2, 3), keepdims=True)
     hm_max.clip(min=1e-6)
-    images = (images - hm_min) / hm_max
+    images = (images - hm_min) / (hm_max - hm_min)
+    # for idx, image in enumerate(images):
+    #    images[idx, :, :, :] = adjust_support(image, support)
     return images
 
 
 def gauss(x, a, b, c, d=0):
     # Helper function for color_heatmap
-    return a * np.exp(-(x - b)**2 / (2 * c**2)) + d
+    return a * np.exp(-(x - b) ** 2 / (2 * c ** 2)) + d
 
 
 def color_heatmap(heatmap: np.array):
@@ -36,12 +44,12 @@ def color_heatmap(heatmap: np.array):
     Returns: np.array of shape [H,W,C] as np.unit8
 
     """
-    #assert heatmap.shape[2] != 1, f"Need [H,W,C] , got {heatmap.shape}"
+    # assert heatmap.shape[2] != 1, f"Need [H,W,C] , got {heatmap.shape}"
     heatmap = sure_to_torch(heatmap).squeeze()
     color = np.zeros((heatmap.shape[0], heatmap.shape[1], 3))
-    color[:,:,0] = gauss(heatmap, .5, .6, .2) + gauss(heatmap, 1, .8, .3)
-    color[:,:,1] = gauss(heatmap, 1, .5, .3)
-    color[:,:,2] = gauss(heatmap, 1, .2, .3)
+    color[:, :, 0] = gauss(heatmap, .5, .6, .2) + gauss(heatmap, 1, .8, .3)
+    color[:, :, 1] = gauss(heatmap, 1, .5, .3)
+    color[:, :, 2] = gauss(heatmap, 1, .2, .3)
     color[color > 1] = 1
     color = (color * 255).astype(np.uint8)
     return color
@@ -60,8 +68,22 @@ def get_color_heatmaps(heatmaps: np.array):
     heat_out = np.zeros((batches, 3, width, height))
     images = heatmaps_to_image(heatmaps).transpose(0, 2, 3, 1)
     for idx in range(batches):
-        heat_out[idx, :, :, :] = color_heatmap(images[idx]).transpose(2,0,1)
+        heat_out[idx, :, :, :] = color_heatmap(images[idx]).transpose(2, 0, 1)
     return heat_out
+
+
+def normalize_nparray(array: np.array):
+    """
+        Normalize array to 0->1
+        Args:
+            array:
+
+        Returns:
+
+        """
+    array -= array.min(1, keepdims=True)[0]
+    array /= array.max(1, keepdims=True)[0].clip(min=1e-6)
+    return array
 
 
 def normalize_tensor(tensor: torch.tensor):
@@ -73,9 +95,11 @@ def normalize_tensor(tensor: torch.tensor):
     Returns:
 
     """
+
     tensor -= tensor.min(1, keepdim=True)[0]
     tensor /= tensor.max(1, keepdim=True)[0]
     return tensor
+
 
 def apply_threshold_to_heatmaps(heatmaps: torch.tensor, thresh: float):
     """
@@ -97,6 +121,7 @@ def apply_threshold_to_heatmaps(heatmaps: torch.tensor, thresh: float):
         # Set these values to 0
         heatmaps[indices] = 0
     return heatmaps
+
 
 def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
     """
@@ -132,6 +157,4 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
     pred_mask = maxval.gt(0).repeat(1, 1, 2).float()
     preds *= pred_mask
 
-
     return preds
-

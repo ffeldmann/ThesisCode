@@ -70,7 +70,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         self.aug_factor = 0.5
         if self.augmentation:
             self.seq = iaa.Sequential([
-                #iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
+                # iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
                 iaa.Sometimes(self.aug_factor, iaa.SaltAndPepper(0.01, per_channel=False)),
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
@@ -87,9 +87,9 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 # result with the original with random alpha. I.e. remove
                 # colors with varying strengths.
                 iaa.Grayscale(alpha=(0.0, 1.0)),
-                #iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
-                #iaa.Sometimes(self.aug_factor, iaa.Clouds()),
-                #iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
+                # iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
+                # iaa.Sometimes(self.aug_factor, iaa.Clouds()),
+                # iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
 
         self.joints = [
@@ -160,7 +160,6 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         keypoints[zero_mask_x] = np.array([0, 0])
         keypoints[zero_mask_y] = np.array([0, 0])
         # we always work with "0->1" images and np.float32
-        # image = adjust_support(image, "0->1")
         height = image.shape[0]
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():
@@ -174,7 +173,8 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             example["inp0"] = adjust_support(image, "0->1")
 
         example["kps"] = keypoints
-        example["targets"] = adjust_support(make_heatmaps(example["inp0"], keypoints, sigma=self.sigma), "0->1")
+        example["kps_mask"] = np.array(keypoints > 0).astype(int)
+        example["targets"] = make_heatmaps(example["inp0"], keypoints, sigma=self.sigma)
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
         # Workaround for the encoder decoder to just see how vae is doing
         example["inp1"] = example["inp0"]

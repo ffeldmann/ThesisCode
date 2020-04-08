@@ -22,6 +22,7 @@ pck:
 losses:
     L1: True
     L2: True
+    JMSE: True
     #TODO
     KL: False
     perceptual: False
