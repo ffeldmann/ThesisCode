@@ -6,22 +6,29 @@ lr: 0.0001
 
 cuda: true  # False -> use GPU
 
-#Training methods
-#pretrained_checkpoint:
+#### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!
+# Heatmap
+hm:
+  # we consider a keypoint to be a keypoint only above thresh
+  thresh: 0.8
 # PCK
 pck:
-    type: "object" # "object" or "image"
     thresh: 0.5
+    pck_multi: True
+    type: "object" # "object" or "image"
 # Losses
 losses:
-    L2: true # TODO
-    L2_kpt: true # TODO
-
+    L1: False
+    L2: True
+    KL: False
+    perceptual: False
+    perceptual_network: "vgg" # alex, squeeze or vgg
+    perceptual_weight: 1.0
 # logging
 integrations:
   git:
-    active: true
-  tensorboard:
-    active: true
+    active: False
   wandb:
-    active: true
+    active: True
+  tensorboard:
+    active: True

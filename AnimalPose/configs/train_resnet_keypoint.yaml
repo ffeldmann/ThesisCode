@@ -9,23 +9,20 @@ ckpt_freq: 2000
 pretrained: True
 resnet_type: 18 #50,101,152
 adjust_learning_rate: False
+#### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!
 # Heatmap
 hm:
   # we consider a keypoint to be a keypoint only above thresh
-  thresh: 0.8 #TODO
-
+  thresh: 0.8
 # PCK
 pck:
     thresh: 0.5
     pck_multi: True
     type: "object" # "object" or "image"
-
 # Losses
 losses:
     L1: False
     L2: True
-    JMSE: False
-    #TODO
     KL: False
     perceptual: False
     perceptual_network: "vgg" # alex, squeeze or vgg
@@ -38,4 +35,3 @@ integrations:
     active: True
   tensorboard:
     active: True
-

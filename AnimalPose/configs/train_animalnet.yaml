@@ -1,6 +1,6 @@
 iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
-batch_size: 8 # 32 on quattro
+batch_size: 64 # 32 on quattro
 num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU

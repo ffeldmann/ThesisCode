@@ -1,4 +1,3 @@
-
 # MPII SEQUENCE DOES NOT HAVE KEYPOINTS, ONLY SEQUENCE IMAGES!
 dataset: AnimalPose.data.MPII_Sequence_Train
 validation_dataset: AnimalPose.data.MPII_Sequence_Validation

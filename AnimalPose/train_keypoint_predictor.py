@@ -10,7 +10,6 @@ from edflow.data.util import adjust_support
 from AnimalPose.data.util import make_stickanimal
 from AnimalPose.utils.image_utils import heatmaps_to_coords, heatmaps_to_image
 from AnimalPose.utils.log_utils import plot_input_target_keypoints
-from AnimalPose.utils.loss_utils import JointsMSELoss
 from AnimalPose.utils.loss_utils import percentage_correct_keypoints
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
@@ -26,8 +25,6 @@ class Iterator(TemplateIterator):
         self.mse_loss = torch.nn.MSELoss()
         # self.mse_instance = MSELossInstances()
         # self.l1_instance = L1LossInstances()
-        self.jointsmseloss = JointsMSELoss(False)
-
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
         self.device = "cuda" if self.cuda else "cpu"
         # self.mean = [0.485, 0.456, 0.406]
@@ -55,7 +52,7 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, targets, predictions, kps_mask):
+    def criterion(self, targets, predictions):
         # make sure everything is a torch tensor
         targets = sure_to_torch(targets)
         predictions = sure_to_torch(predictions)
@@ -63,8 +60,6 @@ class Iterator(TemplateIterator):
         batch_losses = {}
         if self.config["losses"]["L2"]:
             batch_losses["L2"] = self.mse_loss(targets, predictions.cpu())
-        if self.config["losses"]["JMSE"]:
-            batch_losses["JMSE"] = self.jointsmseloss(predictions.cpu(), targets)#, torch.from_numpy(kps_mask))
         batch_losses["total"] = sum(
             [
                 batch_losses[key]
@@ -86,7 +81,7 @@ class Iterator(TemplateIterator):
         predictions = model(inputs)
 
         # compute loss
-        losses = self.criterion(kwargs["targets"], predictions, kwargs["kps_mask"])
+        losses = self.criterion(kwargs["targets"], predictions)
 
         def train_op():
             self.optimizer.zero_grad()
@@ -113,7 +108,8 @@ class Iterator(TemplateIterator):
                     # "image_input": adjust_support(torch2numpy(inputs).transpose(0, 2, 3, 1), "-1->1"),
                     "first_pred": adjust_support(gridded_outputs, "-1->1", "0->1"),
                     "first_targets": adjust_support(gridded_targets, "-1->1", "0->1"),
-                    "outputs": adjust_support(heatmaps_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "outputs": adjust_support(heatmaps_to_image(torch2numpy(predictions)).transpose(0, 2, 3, 1),
+                                              "-1->1", "0->1"),
                     "targets": adjust_support(heatmaps_to_image(kwargs["targets"]).transpose(0, 2, 3, 1), "-1->1"),
                     "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
                     "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), predictions.clone()),
@@ -134,8 +130,6 @@ class Iterator(TemplateIterator):
                 logs["scalars"]["L2"] = losses["L2"]
             if self.config["losses"]["L1"]:
                 logs["scalars"]["L1"] = losses["L1"]
-            if self.config["losses"]["JMSE"]:
-                logs["scalars"]["JMSE"] = losses["JMSE"]
 
             if self.config["pck"]["pck_multi"]:
                 for key, val in pck.items():

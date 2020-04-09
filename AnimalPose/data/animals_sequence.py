@@ -53,7 +53,8 @@ class Animal_Sequence_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
-        self.sc = SequenceDataset(Animal_Sequence(config), 2, step=config["sequence_step_size"])
+        self.sequence_length = 9
+        self.sc = SequenceDataset(Animal_Sequence(config), self.sequence_length, step=config["sequence_step_size"])
         # works if dataroot like "VOC2011/cats_meta"
         # TODO PROBABLY NOT CORRECT HERE
         self.animal = config["dataroot"].split("/")[1].split("_")[0]
@@ -146,8 +147,10 @@ class Animal_Sequence_Abstract(DatasetMixin):
         """
         example = super().get_example(idx)
         output = dict()
-        for ex_idx in range(self.data.data.length):
+        sample_idxs = np.random.choice(np.arange(0, self.sequence_length), 2, replace=False)
+        for i, ex_idx in enumerate(sample_idxs):
             image, keypoints, bboxes = example["frames"][ex_idx](), self.labels["kps"][idx][ex_idx], self.labels["bboxes"][idx][ex_idx]
+            output[f"fid{i}"] = self.labels["fid"][idx][ex_idx]
             # store which keypoints are not present in the dataset
             zero_mask_x = np.where(keypoints[:, 0] <= 0)
             zero_mask_y = np.where(keypoints[:, 1] <= 0)
@@ -169,17 +172,17 @@ class Animal_Sequence_Abstract(DatasetMixin):
             width = image.shape[1]
             if "as_grey" in self.config.keys():
                 if self.config["as_grey"]:
-                    output[f"inp{ex_idx}"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
+                    output[f"inp{i}"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
                     assert (self.data.data.config["n_channels"] == 1), (
                         "n_channels should be 1, got {}".format(self.config["n_channels"]))
                 else:
-                    output[f"inp{ex_idx}"] = adjust_support(image, "0->1")
+                    output[f"inp{i}"] = adjust_support(image, "0->1")
             else:
-                output[f"inp{ex_idx}"] = adjust_support(image, "0->1")
+                output[f"inp{i}"] = adjust_support(image, "0->1")
 
-            output[f"kps{ex_idx}"] = keypoints
-            output[f"kps_mask{ex_idx}"] = np.array(keypoints > 0).astype(int)
-            output[f"targets{ex_idx}"] = adjust_support(make_heatmaps(output[f"inp{ex_idx}"], keypoints, sigma=self.sigma), "0->1")
+            output[f"kps{i}"] = keypoints
+            output[f"kps_mask{i}"] = np.array(keypoints > 0).astype(int)
+            output[f"targets{i}"] = adjust_support(make_heatmaps(output[f"inp{i}"], keypoints, sigma=self.sigma), "0->1")
             output[f"animal_class"] = np.array(animal_class[self.animal])
             # example["joints"] = self.joints
             # example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
