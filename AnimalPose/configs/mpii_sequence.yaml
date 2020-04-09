@@ -1,0 +1,19 @@
+
+# MPII SEQUENCE DOES NOT HAVE KEYPOINTS, ONLY SEQUENCE IMAGES!
+dataset: AnimalPose.data.MPII_Sequence_Train
+validation_dataset: AnimalPose.data.MPII_Sequence_Validation
+dataroot: 'mpii/mpii_sequences_meta/'
+
+n_classes: 19
+n_channels: 3 # rgb or grayscale
+bilinear: true
+resize_to: 128
+as_grey: False
+sigma: 3 # Good way sigma = size/64 for heatmaps
+crop: True
+augmentation: False
+train_size: 0.8
+random_state: 42
+pck_alpha: 0.5
+pck_multi: False
+sequence_step_size: 3 # Steps to be taken from one frame to another
