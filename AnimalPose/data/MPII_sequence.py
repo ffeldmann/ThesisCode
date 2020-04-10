@@ -21,7 +21,8 @@ class MPII_Sequence_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
-        self.sc = SequenceDataset(MPII_Sequence(config), 2, step=config["sequence_step_size"])
+        self.sequence_length = 30
+        self.sc = SequenceDataset(MPII_Sequence(config), self.sequence_length, step=config["sequence_step_size"])
         # works if dataroot like "VOC2011/cats_meta"
         # TODO PROBABLY NOT CORRECT HERE
         self.animal = config["dataroot"].split("/")[1].split("_")[0]
@@ -82,8 +83,10 @@ class MPII_Sequence_Abstract(DatasetMixin):
         """
         example = super().get_example(idx)
         output = dict()
-        for ex_idx in range(self.data.data.length):
+        sample_idxs = np.random.choice(np.arange(0, self.sequence_length), 2, replace=False)
+        for i, ex_idx in enumerate(sample_idxs):
             image = example["frames"][ex_idx]()
+            output[f"fid{i}"] = self.labels["fid"][idx][ex_idx]
             # need uint 8 for augmentation methods
             image = adjust_support(image, "0->255")
             if self.augmentation:
@@ -96,14 +99,13 @@ class MPII_Sequence_Abstract(DatasetMixin):
             width = image.shape[1]
             if "as_grey" in self.config.keys():
                 if self.config["as_grey"]:
-                    output[f"inp{ex_idx}"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
+                    output[f"inp{i}"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
                     assert (self.data.data.config["n_channels"] == 1), (
                         "n_channels should be 1, got {}".format(self.config["n_channels"]))
                 else:
-                    output[f"inp{ex_idx}"] = adjust_support(image, "0->1")
+                    output[f"inp{i}"] = adjust_support(image, "0->1")
             else:
-                output[f"inp{ex_idx}"] = adjust_support(image, "0->1")
-
+                output[f"inp{i}"] = adjust_support(image, "0->1")
         return output
 
 

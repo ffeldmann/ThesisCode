@@ -13,7 +13,7 @@ from AnimalPose.utils.log_utils import plot_input_target_keypoints
 from AnimalPose.utils.loss_utils import percentage_correct_keypoints
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
-
+import torchvision.transforms as transforms
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -27,9 +27,10 @@ class Iterator(TemplateIterator):
         # self.l1_instance = L1LossInstances()
         self.cuda = True if self.config["cuda"] and torch.cuda.is_available() else False
         self.device = "cuda" if self.cuda else "cpu"
-        # self.mean = [0.485, 0.456, 0.406]
-        # self.std = [0.229, 0.224, 0.225]
-        # self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # Imagenet Mean
+        self.mean = [0.485, 0.456, 0.406]
+        self.std = [0.229, 0.224, 0.225]
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         # self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
         if self.cuda:
@@ -75,10 +76,17 @@ class Iterator(TemplateIterator):
 
         # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
-
-        # compute model
-        predictions = model(inputs)
+        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2))
+        # (batch_size, channel, height, width)
+        batch_size, channel, height, width = inputs.shape
+        if self.config["pretrained"]:
+            normalized = torch.zeros((batch_size, channel, height, width), dtype=torch.float32)
+            for idx, element in enumerate(inputs):
+                normalized[idx, :, :, :] = self.normalize(element)
+            # compute model
+            predictions = model(normalized.to(self.device))
+        else:
+            predictions = model(inputs.to(self.device))
 
         # compute loss
         losses = self.criterion(kwargs["targets"], predictions)

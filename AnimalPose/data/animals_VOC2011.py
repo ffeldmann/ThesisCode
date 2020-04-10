@@ -173,7 +173,6 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             example["inp0"] = adjust_support(image, "0->1")
 
         example["kps"] = keypoints
-        example["kps_mask"] = ma.make_mask(keypoints)[:,0].astype(int) # We assume if one coord x,y is zero the keypoint is not present
         example["targets"] = make_heatmaps(example["inp0"], keypoints, sigma=self.sigma)
         example["animal_class"] = np.array(animal_class[self.data.data.animal])
         # Workaround for the encoder decoder to just see how vae is doing
