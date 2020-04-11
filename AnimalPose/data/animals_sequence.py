@@ -1,13 +1,14 @@
 import imgaug.augmenters as iaa
 import numpy as np
 import skimage.color
+import sklearn.model_selection
 from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
-from edflow.data.dataset_mixin import DatasetMixin
 from edflow.data.believers.sequence import SequenceDataset
-import sklearn.model_selection
-from AnimalPose.data.util import make_heatmaps, Rescale, crop
+from edflow.data.dataset_mixin import DatasetMixin
 from edflow.data.util import adjust_support
+from AnimalPose.utils.image_utils import heatmaps_to_image
+from AnimalPose.data.util import make_heatmaps, crop
 
 animal_class = {"cats": 0,
                 "dogs": 1,
@@ -65,11 +66,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
         self.augmentation = config["augmentation"]
         self.aug_factor = 0.5
 
-        if "resize_to" in self.config.keys():
-            self.rescale = Rescale((self.config["resize_to"], self.config["resize_to"]))
-        else:
-            # Scaling to default size 128
-            self.rescale = Rescale((128, 128))
+        self.resize = iaa.Resize(self.config["resize_to"])
         if self.augmentation:
             self.seq = iaa.Sequential([
                 iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
@@ -77,7 +74,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
                 iaa.Flipud(self.aug_factor),
-                #iaa.Sometimes(self.aug_factor,
+                # iaa.Sometimes(self.aug_factor,
                 #              iaa.Affine(
                 #                          rotate=10,
                 #                          scale=(0.5, 0.7)
@@ -89,9 +86,9 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 # result with the original with random alpha. I.e. remove
                 # colors with varying strengths.
                 iaa.Grayscale(alpha=(0.0, 1.0)),
-                #iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
-                #iaa.Sometimes(self.aug_factor, iaa.Clouds()),
-                #iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
+                # iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
+                # iaa.Sometimes(self.aug_factor, iaa.Clouds()),
+                # iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
 
         self.joints = [
@@ -128,8 +125,6 @@ class Animal_Sequence_Abstract(DatasetMixin):
         else:
             self.data = self.sc
 
-
-
     def get_parts(self):
         return parts
 
@@ -163,7 +158,9 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 # randomly perform some augmentations on the image, keypoints and bboxes
                 image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
             # (H, W, C) and keypoints need to be reshaped from (N,J,2) -> (J,2)  J==Number of joints / keypoint pairs
-            image, keypoints = self.rescale(image, keypoints.reshape(-1, 2))
+            image, keypoints = self.resize(image=image, keypoints=keypoints.reshape(1, -1, 2))
+            # image, keypoints = self.rescale(image, keypoints.reshape(-1, 2))
+            keypoints = keypoints.reshape(-1, 2)
             keypoints[zero_mask_x] = np.array([0, 0])
             keypoints[zero_mask_y] = np.array([0, 0])
             # we always work with "0->1" images and np.float32
@@ -181,18 +178,17 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 output[f"inp{i}"] = adjust_support(image, "0->1")
 
             output[f"kps{i}"] = keypoints
-            output[f"kps_mask{i}"] = np.array(keypoints > 0).astype(int)
-            output[f"targets{i}"] = adjust_support(make_heatmaps(output[f"inp{i}"], keypoints, sigma=self.sigma), "0->1")
+            output[f"targets{i}"] = adjust_support(make_heatmaps(output[f"inp{i}"], keypoints, sigma=self.sigma),
+                                                   "0->1")
             output[f"animal_class"] = np.array(animal_class[self.animal])
-            # example["joints"] = self.joints
-            # example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
-
+            output[f"targets{i}_image"] = heatmaps_to_image(output[f"targets{i}"].copy().reshape(1, len(keypoints), height, width)).reshape(width, height, 1)
         return output
 
 
 class Animal_Sequence_Train(Animal_Sequence_Abstract):
     def __init__(self, config):
         super().__init__(config, mode="train")
+
 
 class Animal_Sequence_Validation(Animal_Sequence_Abstract):
     def __init__(self, config):
@@ -224,9 +220,7 @@ class AllAnimals_Sequence_Validation(Animal_Sequence_Abstract):
         return self.data.get_example(idx)
 
 
-
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
     import sys
 
 

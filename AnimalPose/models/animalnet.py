@@ -7,6 +7,7 @@ from edflow.custom_logging import get_logger
 
 from collections import OrderedDict
 
+
 class AnimalEncoder(nn.Module):
     def __init__(self, config, variational):
         super(AnimalEncoder, self).__init__()
@@ -47,7 +48,6 @@ class AnimalEncoder(nn.Module):
         in_features = self.model.fc.in_features
         if self.variational:
             self.model = nn.Sequential(*list(self.model.children())[:-1])
-            # TODO why do i need to explicitly increase the size in_featres * batch_size??
             self.fc1 = nn.Linear(in_features, config["encoder_latent_dim"])
             self.fc2 = nn.Linear(in_features, config["encoder_latent_dim"])
         else:
@@ -73,7 +73,7 @@ class AnimalDecoder(nn.Module):
     def __init__(self, config):
         super(AnimalDecoder, self).__init__()
 
-        self.latent_size = config["decoder_latent_dim"] * 2 if config["encoder_2"] else config["decoder_latent_dim"]
+        self.latent_size = config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"]
         ipt_size = int(config["resize_to"])  # image size
         complexity = 64
         nc_out = config["n_channels"]  # output channels

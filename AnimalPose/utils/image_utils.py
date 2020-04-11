@@ -133,13 +133,13 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
     """
     heatmaps = sure_to_torch(heatmaps)
     #heatmaps = normalize_tensor(heatmaps) # evil if you dont clone the tensor before!
-    if thresh != None:
-        #TODO assert correct!
-        assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
-        # Get the indices where the values are smaller then the threshold
-        indices = heatmaps < thresh
-        # Set these values to 0
-        heatmaps[indices] = 0
+    #if thresh != None:
+    #    #TODO assert correct!
+    #    assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
+    #    # Get the indices where the values are smaller then the threshold
+    #    indices = heatmaps < thresh
+    #    # Set these values to 0
+    #    heatmaps[indices] = 0
     assert heatmaps.dim() == 4, 'Heatmaps should be 4-dim'
     maxval, idx = torch.max(heatmaps.view(heatmaps.size(0), heatmaps.size(1), -1), 2)
 

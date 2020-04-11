@@ -7,7 +7,7 @@ cuda: true  # False -> use GPU
 ckpt_freq: 2000
 #Training methods
 # Encoder pretrained by torchvision
-pretrained: False
+pretrained: True
 load_encoder_pretrained:
     active: False
     path: "load_weights/pretrained_resnet18.ckpt"
@@ -18,8 +18,7 @@ load_decoder_pretrained:
 #    encoder_path: "load_weights/EED_encoder_decoder.pt"
 #    decoder_path: "load_weights/EED_encoder_decoder.pt"
 resnet_type: 18 #18, 50,101,152
-encoder_latent_dim: 256
-decoder_latent_dim: 256
+encoder_latent_dim: 256 # decoder latent dim is automatically set
 encoder_2: True
 
 # True sets the encoder_1 variational

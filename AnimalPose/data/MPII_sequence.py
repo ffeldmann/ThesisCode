@@ -23,10 +23,6 @@ class MPII_Sequence_Abstract(DatasetMixin):
         self.config = config
         self.sequence_length = 30
         self.sc = SequenceDataset(MPII_Sequence(config), self.sequence_length, step=config["sequence_step_size"])
-        # works if dataroot like "VOC2011/cats_meta"
-        # TODO PROBABLY NOT CORRECT HERE
-        self.animal = config["dataroot"].split("/")[1].split("_")[0]
-
         self.train = int(config["train_size"] * len(self.sc))
         self.test = 1 - self.train
         self.sigma = config["sigma"]
