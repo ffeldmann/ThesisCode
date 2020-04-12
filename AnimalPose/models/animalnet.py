@@ -18,6 +18,7 @@ class AnimalEncoder(nn.Module):
         self.logger = get_logger("Encoder")
         self.model = getattr(models, "resnet" + str(config.get("resnet_type", "50")))(
             pretrained=config.get("pretrained", False))
+        self.config = config
         if config["load_encoder_pretrained"]["active"]:
             print(f"Loading weights for Encoder from {config['load_encoder_pretrained']['path']}.")
             state = torch.load(f"{config['load_encoder_pretrained']['path']}")
@@ -56,7 +57,7 @@ class AnimalEncoder(nn.Module):
             self.model.fc = nn.Linear(in_features, config["encoder_latent_dim"])
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(float(self.config["kl_weight"]) * logvar)
+        std = torch.exp(float(self.config["variational"]["kl_weight"]) * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
@@ -136,9 +137,6 @@ def res_block(nf):
 
 class AnimalDecoderSubPixel(nn.Module):
     # https://youtu.be/nG3tT31nPmQ?t=1965
-    """
-    Still only working for hard coded 128x128 output size
-    """
 
     def __init__(self, config):
         super(AnimalDecoderSubPixel, self).__init__()
@@ -147,19 +145,19 @@ class AnimalDecoderSubPixel(nn.Module):
         ipt_size = int(config["resize_to"])  # image size
         nc_out = config["n_channels"]  # output channels
         self.scale = 2
-        self.n_blocks = int(np.log2(ipt_size) - 1)  # no of blocks, last block is hand crafted
-        complexity = 64
+        self.n_blocks = int(np.log2(ipt_size))  # no of blocks, last block is hand crafted
+        complexity = int(self.latent_size)
         features = [conv(self.latent_size, complexity)]
         # BLOCKS 1 - N-1
-        for i in range(self.n_blocks):
-            # self.logger.info(f"i: {i}, complexity: {complexity}")
-            for i2 in range(2):
-                features.append(res_block(complexity))
-            features.append(conv(complexity, complexity))
-            features.append(upsample(complexity, complexity, self.scale))
-            # complexity = int(complexity / 2 ** i)
-        features += [conv(complexity, complexity), upsample(complexity, complexity, self.scale),
-                     conv(complexity, 3)]
+        for i in range(1, self.n_blocks):
+            c_out = int(complexity / 2 ** i)
+            c_in = int(complexity / 2 ** (i - 1))
+            for i2 in range(4):
+                features.append(res_block(c_in))
+            features.append(conv(c_in, c_out))
+            features.append(upsample(c_out, c_out, self.scale))
+        features += [conv(c_out, c_out), upsample(c_out, c_out, self.scale),
+                     conv(c_out, 3)]
         self.model = nn.Sequential(*features)
 
         def initialize_ICNR(m):
