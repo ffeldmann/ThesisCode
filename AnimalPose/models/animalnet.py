@@ -1,11 +1,13 @@
 import numpy as np
 import torch.nn as nn
 import torchvision.models as models
-import torchvision.transforms
+from torch.nn import PixelShuffle
+import math
 import torch
 from edflow.custom_logging import get_logger
 
 from collections import OrderedDict
+from AnimalPose.models.utils import ICNR
 
 
 class AnimalEncoder(nn.Module):
@@ -21,7 +23,7 @@ class AnimalEncoder(nn.Module):
             state = torch.load(f"{config['load_encoder_pretrained']['path']}")
             try:
                 self.model.fc = nn.Linear(state["model"]["encoder_x1.model.fc.weight"].shape[1],
-                                     state["model"]["encoder_x1.model.fc.weight"].shape[0])
+                                          state["model"]["encoder_x1.model.fc.weight"].shape[0])
                 new_state_dict = OrderedDict()
                 for k, v in state["model"].items():
                     if k.startswith("encoder_"):
@@ -54,7 +56,7 @@ class AnimalEncoder(nn.Module):
             self.model.fc = nn.Linear(in_features, config["encoder_latent_dim"])
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
+        std = torch.exp(float(self.config["kl_weight"]) * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
@@ -67,6 +69,111 @@ class AnimalEncoder(nn.Module):
             enc = self.reparameterize(mu, logvar)
             return enc, mu, logvar
         return enc
+
+
+class ResSequential(nn.Module):
+    """
+    Helper module for AnimalDecoderSubPixel
+    """
+
+    def __init__(self, layers, res_scale=1.0):
+        super().__init__()
+        self.res_scale = res_scale
+        self.m = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return x + self.m(x) * self.res_scale
+
+
+# we want Conv -> ReLu -> Conv
+def conv(ni, nf, kernel_size=3, actn=False):
+    """
+    Helper for ResSequential
+    Args:
+        ni:
+        nf:
+        kernel_size:
+        actn:
+
+    Returns:
+
+    """
+    layers = nn.Sequential()
+    layers.add_module("Conv2d", nn.Conv2d(ni, nf, kernel_size, padding=kernel_size // 2))
+    if actn: layers.add_module("ReLu", nn.ReLU(inplace=True))
+    return layers
+
+
+def upsample(ni, nf, scale):
+    """
+    Helper for ResSequential
+    Args:
+        ni:
+        nf:
+        scale:
+
+    Returns:
+
+    """
+    layers = nn.Sequential()
+    for i in range(int(math.log(scale, 2))):
+        layers.add_module("PixelConv", conv(ni, nf * 4))
+        layers.add_module("PS", nn.PixelShuffle(2))
+    return layers
+
+
+def res_block(nf):
+    """
+    Helper for ResSequential
+    Args:
+        nf:
+
+    Returns:
+
+    """
+    return ResSequential([conv(nf, nf, actn=True), conv(nf, nf)], 0.1)
+
+
+class AnimalDecoderSubPixel(nn.Module):
+    # https://youtu.be/nG3tT31nPmQ?t=1965
+    """
+    Still only working for hard coded 128x128 output size
+    """
+
+    def __init__(self, config):
+        super(AnimalDecoderSubPixel, self).__init__()
+        self.logger = get_logger(self)
+        self.latent_size = config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"]
+        ipt_size = int(config["resize_to"])  # image size
+        nc_out = config["n_channels"]  # output channels
+        self.scale = 2
+        self.n_blocks = int(np.log2(ipt_size) - 1)  # no of blocks, last block is hand crafted
+        complexity = 64
+        features = [conv(self.latent_size, complexity)]
+        # BLOCKS 1 - N-1
+        for i in range(self.n_blocks):
+            # self.logger.info(f"i: {i}, complexity: {complexity}")
+            for i2 in range(2):
+                features.append(res_block(complexity))
+            features.append(conv(complexity, complexity))
+            features.append(upsample(complexity, complexity, self.scale))
+            # complexity = int(complexity / 2 ** i)
+        features += [conv(complexity, complexity), upsample(complexity, complexity, self.scale),
+                     conv(complexity, 3)]
+        self.model = nn.Sequential(*features)
+
+        def initialize_ICNR(m):
+            classname = m.__class__.__name__
+            if classname == "Sequential":
+                try:
+                    m.PixelConv.Conv2d.weight.data = ICNR(m.PixelConv.Conv2d.weight.data)
+                except:
+                    pass
+
+        self.model.apply(initialize_ICNR)
+
+    def forward(self, x):
+        return self.model(x)
 
 
 class AnimalDecoder(nn.Module):
@@ -177,12 +284,16 @@ class AnimalNet(nn.Module):
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
         # self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
-
+        self.config = config
         self.variational = True if config["variational"]["active"] else False
         self.encoder_x1 = AnimalEncoder(config, variational=self.variational)
         if config["encoder_2"]:
             self.encoder_x2 = AnimalEncoder(config, variational=False)
-        self.decoder = AnimalDecoder(config)
+
+        if config["superpixel"]:
+            self.decoder = AnimalDecoderSubPixel(config)
+        else:
+            self.decoder = AnimalDecoder(config)
 
     def forward(self, x1, x2=None):
         # x1 = self.normalize(x1)

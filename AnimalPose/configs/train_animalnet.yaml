@@ -1,6 +1,6 @@
 iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
-batch_size: 64 # 32 on quattro
+batch_size: 32 # 32 on quattro
 num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU
@@ -13,18 +13,16 @@ load_encoder_pretrained:
     path: "load_weights/pretrained_resnet18.ckpt"
 load_decoder_pretrained:
     active: False
-#load_animal_pretrained:
-#    active: False
-#    encoder_path: "load_weights/EED_encoder_decoder.pt"
-#    decoder_path: "load_weights/EED_encoder_decoder.pt"
+# Superpixel True loads different decoder
+superpixel: True
 resnet_type: 18 #18, 50,101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set
-encoder_2: True
+encoder_2: False
 
 # True sets the encoder_1 variational
 variational:
     active: True
-    kl_weight: 1 # TODO
+    kl_weight: 0.5
 # Losses
 losses:
     L2: False
