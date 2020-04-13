@@ -56,21 +56,15 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, targets, predictions, mu=None, logvar=None):
+    def criterion(self, targets, predictions, mu=None, logvar=None, mu2=None, logvar2=None):
         # calculate losses
         crit = torch.nn.MSELoss()
         batch_losses = {}
         if self.config["losses"]["L2"]:
             batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
-            # Reconstruction + KL divergence losses summed over all elements and batch
-            # see Appendix B from VAE paper:
-            # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-            # https://arxiv.org/abs/1312.6114
-            # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-            RE = torch.abs(torch.from_numpy(targets).to(self.device) - predictions)
             KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            batch_losses["KL"] = RE + KLD
+            batch_losses["KL"] = KLD * self.config["variational"]["kl_weight"]
 
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
@@ -78,16 +72,12 @@ class Iterator(TemplateIterator):
         if self.config["losses"]["vgg"]:
             batch_losses["vgg"] = self.vggL1(torch.from_numpy(targets).float().to(self.device),
                                              predictions.to(self.device))
-        batch_losses["total"] = batch_losses["vgg"] # sum(batch_losses[key] for key in batch_losses.keys())
-        # instance_losses["total"] = sum(
-        #    [
-        #        instance_losses[key]
-        #        for key in instance_losses.keys()
-        #    ]
-        # )
-
-        # reduce to batch granularity
-        # batch_losses = {k: v.mean() for k, v in instance_losses.items()}
+        batch_losses["total"] = sum(
+           [
+               batch_losses[key]
+               for key in batch_losses.keys()
+           ]
+        )
 
         return batch_losses
 
@@ -107,7 +97,7 @@ class Iterator(TemplateIterator):
 
         if self.encoder_2:
             if self.variational:
-                predictions, mu, logvar = model(inputs0, inputs1)
+                predictions, mu, logvar, mu2, logvar2 = model(inputs0, inputs1)
             else:
                 predictions = model(inputs0, inputs1)
         else:
@@ -118,17 +108,17 @@ class Iterator(TemplateIterator):
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
         if self.variational:
-            losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
+            if self.encoder_2:
+                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, mu2, logvar2)
+            else:
+                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
         else:
             losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions)
 
         def train_op():
-            before = time.time()
             self.optimizer.zero_grad()
             losses["total"].backward()
             self.optimizer.step()
-            if retrieve(self.config, "debug_timing", default=False):
-                self.logger.info("train step needed {} s".format(time.time() - before))
 
         def log_op():
             from edflow.data.util import adjust_support

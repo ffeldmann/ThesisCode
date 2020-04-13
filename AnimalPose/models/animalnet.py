@@ -49,6 +49,8 @@ class AnimalEncoder(nn.Module):
                 self.model.load_state_dict(new_state_dict)
         # save fc layer dimensions
         in_features = self.model.fc.in_features
+
+        # resnet -> 256 -> mu, sigma
         if self.variational:
             self.model = nn.Sequential(*list(self.model.children())[:-1])
             self.fc1 = nn.Linear(in_features, config["encoder_latent_dim"])
@@ -57,14 +59,13 @@ class AnimalEncoder(nn.Module):
             self.model.fc = nn.Linear(in_features, config["encoder_latent_dim"])
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(float(self.config["variational"]["kl_weight"]) * logvar)
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def forward(self, x):
         enc = self.model(x)
         if self.variational:
-            enc = self.model(x)
             mu = self.fc1(enc.squeeze())
             logvar = self.fc2(enc.squeeze())
             enc = self.reparameterize(mu, logvar)
@@ -105,7 +106,7 @@ def conv(ni, nf, kernel_size=3, actn=False):
     return layers
 
 
-def upsample(ni, nf, scale):
+def up_sample(ni, nf, scale, subpixel=False):
     """
     Helper for ResSequential
     Args:
@@ -117,9 +118,17 @@ def upsample(ni, nf, scale):
 
     """
     layers = nn.Sequential()
-    for i in range(int(math.log(scale, 2))):
-        layers.add_module("PixelConv", conv(ni, nf * 4))
-        layers.add_module("PS", nn.PixelShuffle(2))
+    if subpixel:
+        for i in range(int(math.log(scale, 2))):
+            layers.add_module("PixelConv", conv(ni, nf * 4))
+            layers.add_module("PS", nn.PixelShuffle(2))
+    else:
+        layers.add_module("Up", nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(ni, nf, kernel_size=3, stride=1, padding=1),
+        )
+                          )
     return layers
 
 
@@ -135,16 +144,16 @@ def res_block(nf):
     return ResSequential([conv(nf, nf, actn=True), conv(nf, nf)], 0.1)
 
 
-class AnimalDecoderSubPixel(nn.Module):
+class AnimalDecoder(nn.Module):
     # https://youtu.be/nG3tT31nPmQ?t=1965
-
     def __init__(self, config):
-        super(AnimalDecoderSubPixel, self).__init__()
+        super(AnimalDecoder, self).__init__()
         self.logger = get_logger(self)
         self.latent_size = config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"]
         ipt_size = int(config["resize_to"])  # image size
         nc_out = config["n_channels"]  # output channels
         self.scale = 2
+        self.superpixel = config["superpixel"]
         self.n_blocks = int(np.log2(ipt_size))  # no of blocks, last block is hand crafted
         complexity = int(self.latent_size)
         features = [conv(self.latent_size, complexity)]
@@ -155,26 +164,30 @@ class AnimalDecoderSubPixel(nn.Module):
             for i2 in range(4):
                 features.append(res_block(c_in))
             features.append(conv(c_in, c_out))
-            features.append(upsample(c_out, c_out, self.scale))
-        features += [conv(c_out, c_out), upsample(c_out, c_out, self.scale),
+            features.append(nn.BatchNorm2d(c_out))
+            features.append(up_sample(c_out, c_out, self.scale, self.superpixel))
+        features += [conv(c_out, c_out),
+                     nn.BatchNorm2d(c_out),
+                     up_sample(c_out, c_out, self.scale),
                      conv(c_out, 3)]
         self.model = nn.Sequential(*features)
 
-        def initialize_ICNR(m):
+        def initialize_icnr(m):
             classname = m.__class__.__name__
             if classname == "Sequential":
                 try:
-                    m.PixelConv.Conv2d.weight.data = ICNR(m.PixelConv.Conv2d.weight.data)
+                    m.PixelConv.Conv2d.weight.data.copy_(ICNR(m.PixelConv.Conv2d.weight.data))
                 except:
                     pass
 
-        self.model.apply(initialize_ICNR)
+        if self.superpixel:
+            self.model.apply(initialize_icnr)
 
     def forward(self, x):
         return self.model(x)
 
 
-class AnimalDecoder(nn.Module):
+class AnimalDecoderOLD(nn.Module):
     def __init__(self, config):
         super(AnimalDecoder, self).__init__()
 
@@ -286,12 +299,8 @@ class AnimalNet(nn.Module):
         self.variational = True if config["variational"]["active"] else False
         self.encoder_x1 = AnimalEncoder(config, variational=self.variational)
         if config["encoder_2"]:
-            self.encoder_x2 = AnimalEncoder(config, variational=False)
-
-        if config["superpixel"]:
-            self.decoder = AnimalDecoderSubPixel(config)
-        else:
-            self.decoder = AnimalDecoder(config)
+            self.encoder_x2 = AnimalEncoder(config, variational=self.variational)
+        self.decoder = AnimalDecoder(config)
 
     def forward(self, x1, x2=None):
         # x1 = self.normalize(x1)
@@ -301,12 +310,15 @@ class AnimalNet(nn.Module):
             x1 = self.encoder_x1(x1)
         if x2 != None:
             # x2 = self.normalize(x2)
-            x2 = self.encoder_x2(x2)
+            if self.variational:
+                x2, mu2, logvar2 = self.encoder_x2(x2)
+            else:
+                x2 = self.encoder_x2(x2)
             x1x2 = torch.cat((x1, x2), dim=1)
             # unsqueeze x1 adding [B, C, 1,1]
             x1x2 = x1x2.unsqueeze(-1).unsqueeze(-1)
             if self.variational:
-                return self.decoder(x1x2), mu, logvar
+                return self.decoder(x1x2), mu, logvar, mu2, logvar2
             else:
                 return self.decoder(x1x2)
         # unsqueeze x1 adding [B, C, 1,1]
@@ -315,43 +327,3 @@ class AnimalNet(nn.Module):
             return self.decoder(x1), mu, logvar
         else:
             return self.decoder(x1)
-
-# class ConvBlock(nn.Module):
-#     """
-#     Helper module that consists of a Conv -> BN -> ReLU
-#     """
-#
-#     def __init__(self, in_channels, out_channels, padding=1, kernel_size=3, stride=1, with_nonlinearity=True):
-#         super().__init__()
-#         self.conv = nn.Conv2d(in_channels, out_channels, padding=padding, kernel_size=kernel_size, stride=stride)
-#         self.bn = nn.BatchNorm2d(out_channels)
-#         self.relu = nn.ReLU()
-#         self.with_nonlinearity = with_nonlinearity
-#
-#     def forward(self, x):
-#         x = self.conv(x)
-#         x = self.bn(x)
-#         if self.with_nonlinearity:
-#             x = self.relu(x)
-#         return x
-#
-#
-# class ResidualBlock(nn.Module):
-#     def __init__(self, in_channels, out_channels):
-#         super().__init__()
-#         self.in_channels, self.out_channels = in_channels, out_channels
-#         self.blocks = nn.Identity()
-#         self.activate = nn.ReLU()
-#         self.shortcut = nn.Identity()
-#
-#     def forward(self, x):
-#         residual = x
-#         if self.should_apply_shortcut: residual = self.shortcut(x)
-#         x = self.blocks(x)
-#         x += residual
-#         x = self.activate(x)
-#         return x
-#
-#     @property
-#     def should_apply_shortcut(self):
-#         return self.in_channels != self.out_channels

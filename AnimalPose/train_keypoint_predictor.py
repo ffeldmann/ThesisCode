@@ -148,7 +148,6 @@ class Iterator(TemplateIterator):
             return logs
 
         def eval_op():
-            # percentage correct keypoints pck
             # return {
             # "outputs": np.array(predictions.cpu().detach().numpy()),
             # TODO in which shape is the outputs necessary for evaluation?

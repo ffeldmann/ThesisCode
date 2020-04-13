@@ -1,6 +1,6 @@
 iterator: AnimalPose.train_animalnet.Iterator
 model: AnimalPose.models.AnimalNet
-batch_size: 32 # 32 on quattro
+batch_size: 16 # 32 on quattro
 num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU
@@ -14,25 +14,25 @@ load_encoder_pretrained:
 load_decoder_pretrained:
     active: False
 # Superpixel True loads different decoder
-superpixel: True
-resnet_type: 18 #18, 50,101,152
-encoder_latent_dim: 256 # decoder latent dim is automatically set
+superpixel: False
+resnet_type: 50 #18, 50,101,152
+encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
 encoder_2: False
 
 # True sets the encoder_1 variational
 variational:
     active: True
     kl_weight: 0.5
+
 # Losses
 losses:
-    L2: False
-    L2_kpt: False # TODO
+    L2: True
     KL: True
     perceptual: False
     perceptual_network: "vgg" # alex, squeeze or vgg
     perceptual_weight: 1.0
     #VGGL1Loss
-    vgg: True
+    vgg: False
     vgg_l1_alpha: 1.0
     vgg_alpha: 1.0
 
@@ -44,4 +44,3 @@ integrations:
     active: True
   tensorboard:
     active: True
-
