@@ -31,6 +31,21 @@ class L1LossInstances(torch.nn.L1Loss):
         return reduced
 
 
+def row_pairwise_distances(x, y=None, dist_mat=None):
+    from torch.autograd import Variable
+    if y is None:
+        y = x
+    if dist_mat is None:
+        dtype = x.data.type()
+        dist_mat = Variable(torch.Tensor(x.size()[0], y.size()[0]).type(dtype))
+
+    for i, row in enumerate(x.split(1)):
+        r_v = row.expand_as(y)
+        sq_dist = torch.sum((r_v - y) ** 2, 1)
+        dist_mat[i] = sq_dist.view(1, -1)
+    return torch.sqrt(torch.max(dist_mat))
+
+
 def percentage_correct_keypoints(keypoints: np.array,
                                  predictions: np.array,
                                  thresh: float = 0.5,
@@ -57,7 +72,7 @@ def percentage_correct_keypoints(keypoints: np.array,
     assert len(keypoints.shape) == 3, f"Only implemented for a batch got shape of keypoints: {keypoints.shape}"
     keypoints = sure_to_torch(keypoints).cpu()
     predictions = sure_to_torch(predictions).cpu()
-
+    assert len(keypoints) == len(predictions), "Keypoints and predictions tensor need to have the same size."
     batch_size = keypoints.size(0)
     pck = torch.zeros(batch_size)
     num_pts = torch.zeros(batch_size)
@@ -67,14 +82,22 @@ def percentage_correct_keypoints(keypoints: np.array,
         # computes pck for all keypoint pairs of once instance
         p_src = keypoints[idx, :]
         p_pred = predictions[idx, :]
-        if pck_type == 'object':
-            l_pck = torch.Tensor([torch.max(p_src.max(1)[0] - p_src.min(1)[0])])
-        elif pck_type == 'image':
-            l_pck = torch.Tensor([image_size])
         # True values in mask indicate the keypoint was present in the dataset
         # Negative values indicate the value was not in the dataset
         mask = torch.ne(p_src[:, 0], 0) * torch.ne(p_src[:, 1], 0)
+        # if only one point is present
+        if len(p_src[mask]) < 2:
+            pck[idx] = 0
+            correct_index[idx, :] = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            continue
+
         num_joints[idx] = mask
+        if pck_type == 'object':
+            l_pck = row_pairwise_distances(p_src[mask])
+            # l_pck = torch.Tensor([torch.max(p_src.max(1)[0] - p_src.min(1)[0])])
+        elif pck_type == 'image':
+            l_pck = torch.Tensor([image_size])
+
         # Sum all available keypoints in the dataset
         N_pts = torch.sum(mask)
         # Set points not present in the dataset to false in source and target points
@@ -82,21 +105,21 @@ def percentage_correct_keypoints(keypoints: np.array,
         p_pred[~mask, :] = 0
         num_pts[idx] = N_pts
         point_distance = torch.pow(torch.sum(torch.pow(p_src - p_pred, 2), 1), 0.5)  # 0.5 means squared!!
-
         L_pck_mat = l_pck.expand_as(point_distance)  # val -> val, val
-        correct_points = torch.le(point_distance, L_pck_mat * thresh)
-        correct_points[~mask] = False
+        correct_points = torch.le(point_distance, L_pck_mat * thresh).type(torch.uint8)
+
+        correct_points[~mask] = 0
         # C_pts = torch.sum(correct_points)
         correct_index[idx, :] = correct_points.view(-1)
         # PCK for the image is divided by the number of valid points in GT
         pck[idx] = torch.sum(correct_points.float()) / torch.clamp(N_pts.float(), min=1e-6)
+        assert pck[idx] >= 0
 
     # Reduce to joint granularity
     correct_per_joint = torch.sum(correct_index, dim=0)
     sum_available_joint = torch.sum(num_joints, dim=0)
     # clamp the tensor, sometimes we have zero available joints and then we have NaN values
     pck_joints = correct_per_joint / torch.clamp(sum_available_joint, min=1e-6)
-    # TODO: joint is not present in the dataset here it will still be returned as "zero" accuracy
     return pck.mean().numpy(), pck_joints.numpy()
 
 
@@ -221,7 +244,6 @@ class VGGLossWithL1(VGGLoss):
         vgg_loss = super(VGGLossWithL1, self).forward(x, y)
         loss = self.criterion(x, y) * self.l1_alpha + vgg_loss * self.vgg_alpha
         return loss
-
 
 # def scale_img(x):
 #     """
