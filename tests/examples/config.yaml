@@ -1,8 +1,0 @@
-max_dataset_size: 100
-
-integrations:
-  git: False
-  wandb:
-    active: False
-  tensorboardX:
-    active: False
