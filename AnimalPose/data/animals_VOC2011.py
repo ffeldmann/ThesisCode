@@ -5,10 +5,9 @@ from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
 import sklearn.model_selection
-from AnimalPose.data.util import make_heatmaps, Rescale, crop
+from AnimalPose.data.util import make_heatmaps, crop, make_stickanimal
 from edflow.data.util import adjust_support
 from edflow import get_logger
-import numpy.ma as ma
 
 animal_class = {"cats": 0,
                 "dogs": 1,
@@ -51,23 +50,24 @@ class AnimalVOC2011(MetaDataset):
         self.logger = get_logger(self)
         # works if dataroot like "VOC2011/cats_meta"
         self.animal = config["dataroot"].split("/")[1].split("_")[0]
-        if "resize_to" in self.config.keys():
-            self.rescale = Rescale((self.config["resize_to"], self.config["resize_to"]))
-        else:
-            # Scaling to default size 128
-            self.rescale = Rescale((128, 128))
+        # if "resize_to" in self.config.keys():
+        #     self.rescale = Rescale((self.config["resize_to"], self.config["resize_to"]))
+        # else:
+        #     # Scaling to default size 128
+        #     self.rescale = Rescale((128, 128))
 
 
 class AnimalVOC2011_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
-
+        self.config = config
         self.sc = AnimalVOC2011(config)
         self.train = int(config["train_size"] * len(self.sc))
         self.test = 1 - self.train
         self.sigma = config["sigma"]
         self.augmentation = config["augmentation"]
         self.aug_factor = 0.5
+        self.resize = iaa.Resize(self.config["resize_to"])
         if self.augmentation:
             self.seq = iaa.Sequential([
                 # iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
@@ -75,7 +75,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
                 iaa.Flipud(self.aug_factor),
-                #iaa.Sometimes(self.aug_factor,
+                # iaa.Sometimes(self.aug_factor,
                 #              iaa.Affine(
                 #                  rotate=10,
                 #                  scale=(0.5, 0.7)
@@ -142,6 +142,7 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
         """
         example = super().get_example(idx)
+        output = {}
         image, keypoints, bboxes = example["frames"](), self.labels["kps"][idx], self.labels["bboxes"][idx]
         # store which keypoints are not present in the dataset
         zero_mask_x = np.where(keypoints[:, 0] <= 0)
@@ -156,7 +157,9 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
 
         # (H, W, C) and keypoints need to be reshaped from (N,J,2) -> (J,2)  J==Number of joints / keypoint pairs
-        image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1, 2))
+        image, keypoints = self.resize(image=image, keypoints=keypoints.reshape(1, -1, 2))
+        keypoints = keypoints.reshape(-1, 2)
+        # image, keypoints = self.data.data.rescale(image, keypoints.reshape(-1, 2))
         keypoints[zero_mask_x] = np.array([0, 0])
         keypoints[zero_mask_y] = np.array([0, 0])
         # we always work with "0->1" images and np.float32
@@ -164,22 +167,23 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         width = image.shape[1]
         if "as_grey" in self.data.data.config.keys():
             if self.data.data.config["as_grey"]:
-                example["inp0"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
+                output["inp0"] = adjust_support(skimage.color.rgb2gray(image).reshape(height, width, 1), "0->1")
                 assert (self.data.data.config["n_channels"] == 1), (
                     "n_channels should be 1, got {}".format(self.data.data.config["n_channels"]))
             else:
-                example["inp0"] = adjust_support(image, "0->1")
+                output["inp0"] = adjust_support(image, "0->1")
         else:
-            example["inp0"] = adjust_support(image, "0->1")
+            output["inp0"] = adjust_support(image, "0->1")
 
-        example["kps"] = keypoints
-        example["targets"] = make_heatmaps(example["inp0"], keypoints, sigma=self.sigma)
-        example["animal_class"] = np.array(animal_class[self.data.data.animal])
+        output["kps"] = keypoints
+        output["targets"] = make_heatmaps(output["inp0"], keypoints, sigma=self.sigma)
+        output["animal_class"] = np.array(animal_class[self.data.data.animal])
+        output["stickanmial"] = make_stickanimal(np.expand_dims(output["inp0"], 0), np.expand_dims(keypoints, 0))
         # Workaround for the encoder decoder to just see how vae is doing
-        example["inp1"] = example["inp0"]
-        # example["joints"] = self.joints
-        example.pop("frames")  # TODO: This removes the original frames which are not necessary for us here.
-        return example
+        output["inp1"] = output["inp0"]
+        output["framename"] = self.labels["frames_"][idx]
+        # output["joints"] = self.joints
+        return output
 
 
 class AnimalVOC2011_Train(AnimalVOC2011_Abstract):
@@ -218,6 +222,19 @@ class AllAnimalsVOC2011_Validation(AnimalVOC2011_Abstract):
         return self.data.get_example(idx)
 
 
+class AllAnimalsVOC2011(AnimalVOC2011_Abstract):
+    def __init__(self, config):
+        super().__init__(config, mode="all")
+        for animal in config["animals"]:
+            try:
+                self.data += AnimalVOC2011(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+            except:
+                self.data = AnimalVOC2011(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+
+    def get_example(self, idx):
+        return self.data.get_example(idx)
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import sys
@@ -238,11 +255,3 @@ if __name__ == "__main__":
 
 
     sys.excepthook = info
-
-    DATAROOT = {"dataroot": '/export/home/ffeldman/Masterarbeit/data/VOC2011/cats_meta'}
-    cats = CatsVOC2011(DATAROOT)
-    ex = cats.get_example(3)
-    for hm in ex["targets"]:
-        print(hm.shape)
-        plt.imshow(hm)
-        plt.show()

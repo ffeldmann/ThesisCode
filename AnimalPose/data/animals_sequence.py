@@ -74,21 +74,12 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
                 iaa.Flipud(self.aug_factor),
-                # iaa.Sometimes(self.aug_factor,
-                #              iaa.Affine(
-                #                          rotate=10,
-                #                          scale=(0.5, 0.7)
-                #                        )
-                #              ),
                 iaa.Sometimes(self.aug_factor, iaa.GaussianBlur(sigma=(0, 3.0))),
                 iaa.LinearContrast((0.75, 1.5)),
                 # Convert each image to grayscale and then overlay the
                 # result with the original with random alpha. I.e. remove
                 # colors with varying strengths.
                 iaa.Grayscale(alpha=(0.0, 1.0)),
-                # iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
-                # iaa.Sometimes(self.aug_factor, iaa.Clouds()),
-                # iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
 
         self.joints = [
@@ -182,6 +173,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
                                                    "0->1")
             output[f"animal_class"] = np.array(animal_class[self.animal])
             output[f"targets{i}_image"] = heatmaps_to_image(output[f"targets{i}"].copy().reshape(1, len(keypoints), height, width)).reshape(width, height, 1)
+            output[f"framename{i}"] = self.labels["frames_"][idx][ex_idx]
         return output
 
 

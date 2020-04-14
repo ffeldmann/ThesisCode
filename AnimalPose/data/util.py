@@ -113,7 +113,7 @@ def make_stickanimal(image, predictions):
     image = adjust_support(np.copy(image), "0->255").astype(np.uint8)
     if predictions.shape[-1] != 2:
         # Predictions to Keypoints
-        coords = heatmaps_to_coords(torch2numpy(predictions))
+        coords, maxval = heatmaps_to_coords(torch2numpy(predictions))
     else:
         coords = predictions
 
@@ -127,6 +127,8 @@ def make_stickanimal(image, predictions):
         # Body
         [8, 9],  # Throat - L_F_Elbow
         [8, 5],  # Throat - R_F_Elbow
+        [9, 10],   # L_F_Elbow - Withers
+        [5, 10],   # R_F_Elbow - Withers
         # Front
         [9, 16],  # L_F_Elbow - L_F_Knee
         [16, 6],  # L_F_Knee - L_F_Paw
@@ -138,6 +140,8 @@ def make_stickanimal(image, predictions):
         [15, 19],  # R_B_Elbow - R_B_Knee
         [19, 13],  # R_B_Knee - R_B_Paw
         [10, 11],  # Withers - TailBase
+        [11, 15],  # Tailbase - R_B_Elbow
+        [11, 14],  # Tailbase - L_B_Elbow
     ]
     #  BGR color such as: Blue = a, Green = b and Red = c
     head = (255, 0, 0)  # red
@@ -153,15 +157,19 @@ def make_stickanimal(image, predictions):
         4: head,
         5: body,
         6: body,
-        7: front,
-        8: front,
+        7: body,
+        8: body,
         9: front,
         10: front,
-        11: back,
-        12: back,
+        11: front,
+        12: front,
         13: back,
         14: back,
         15: back,
+        16: back,
+        17: back,
+        18: back,
+        19: back,
     }
     for idx, orig in enumerate(image):
         img = np.zeros((orig.shape[0], orig.shape[1], orig.shape[2]), np.uint8)

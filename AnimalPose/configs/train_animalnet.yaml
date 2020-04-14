@@ -22,7 +22,7 @@ encoder_2: False
 # True sets the encoder_1 variational
 variational:
     active: True
-    kl_weight: 0.5
+    kl_weight: 1
 
 # Losses
 losses:

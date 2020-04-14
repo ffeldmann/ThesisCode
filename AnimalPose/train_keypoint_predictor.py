@@ -101,7 +101,7 @@ class Iterator(TemplateIterator):
             PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
             if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
 
-            coords = heatmaps_to_coords(predictions.clone(), thresh=self.config["hm"]["thresh"])
+            coords, _ = heatmaps_to_coords(predictions.clone(), thresh=self.config["hm"]["thresh"])
             pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
                    PCK_THRESH}
 
@@ -131,7 +131,7 @@ class Iterator(TemplateIterator):
                     "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
                                                                     # get BHWC
                                                                     torch2numpy(predictions),  # stay BCHW
-                                                                    kwargs["kps"]),
+                                                                    kwargs["kps"], coords),
                 }
             }
             if self.config["losses"]["L2"]:

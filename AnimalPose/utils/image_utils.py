@@ -132,12 +132,12 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     """
     heatmaps = sure_to_torch(heatmaps)
-    if thresh != None:
-        # assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
-        # Get the indices where the values are smaller then the threshold
-        indices = heatmaps < thresh
-        # Set these values to 0
-        heatmaps[indices] = 0
+    # if thresh != None:
+    #     # assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
+    #     # Get the indices where the values are smaller then the threshold
+    #     indices = heatmaps < thresh
+    #     # Set these values to 0
+    #     heatmaps[indices] = 0
     assert heatmaps.dim() == 4, 'Heatmaps should be 4-dim'
     maxval, idx = torch.max(heatmaps.view(heatmaps.size(0), heatmaps.size(1), -1), 2)
 
@@ -151,5 +151,4 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     pred_mask = maxval.gt(0).repeat(1, 1, 2).float()
     preds *= pred_mask
-
-    return preds
+    return preds, maxval

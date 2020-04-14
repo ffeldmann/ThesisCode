@@ -7,9 +7,9 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.hooks.training_hooks import RestorePretrainedSDCHook
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 import torchvision
+
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -22,14 +22,6 @@ class Iterator(TemplateIterator):
         self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std, inplace=True)
         if self.cuda:
             self.model.cuda()
-        # hooks
-        if "pretrained_checkpoint" in self.config.keys():
-            self.hooks.append(
-                RestorePretrainedSDCHook(
-                    pretrained_checkpoint=self.config["pretrained_checkpoint"],
-                    model=self.model,
-                )
-            )
 
     def save(self, checkpoint_path):
         state = {
@@ -76,7 +68,7 @@ class Iterator(TemplateIterator):
         # inputs now
         # (batch_size, channel, width, height)
         # normalization done inplace
-        #for inp in inputs: self.normalize(inp)
+        # for inp in inputs: self.normalize(inp)
         # animal labels
         labels = torch.from_numpy(kwargs["animal_class"]).to("cuda")
         # compute model
@@ -89,7 +81,6 @@ class Iterator(TemplateIterator):
         # Compute accuracy for batch
         corrects = torch.sum(preds == labels.data)
         accuracy = corrects.double() / self.config["batch_size"]
-
 
         def train_op():
             before = time.time()

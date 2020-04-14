@@ -64,7 +64,7 @@ class Iterator(TemplateIterator):
             batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
             KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            batch_losses["KL"] = KLD * self.config["variational"]["kl_weight"]
+            batch_losses["KL"] = KLD * self.config["variational"]["kl_weight"] # TODO: Correct here?
 
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),

@@ -29,7 +29,7 @@ hm = np.expand_dims(hm, 0)
 
 
 def test_heatmaps_to_coords():
-    coords = heatmaps_to_coords(hm)
+    coords, _ = heatmaps_to_coords(hm)
 
     # test zeros only
     zeros_only = np.array([0., 0.],
