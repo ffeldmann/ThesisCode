@@ -56,15 +56,17 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
-    def criterion(self, targets, predictions, mu=None, logvar=None, mu2=None, logvar2=None):
+    def criterion(self, targets, predictions, mu=None, logvar=None):
         # calculate losses
         crit = torch.nn.MSELoss()
         batch_losses = {}
         if self.config["losses"]["L2"]:
             batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
-            KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            batch_losses["KL"] = KLD * self.config["variational"]["kl_weight"] # TODO: Correct here?
+            assert self.config["losses"]["L2"], "L2 loss necessary here!"
+            #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            KLD = 0.1 * torch.sum(mu.pow(2))
+            batch_losses["KL"] = KLD
 
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
@@ -73,10 +75,10 @@ class Iterator(TemplateIterator):
             batch_losses["vgg"] = self.vggL1(torch.from_numpy(targets).float().to(self.device),
                                              predictions.to(self.device))
         batch_losses["total"] = sum(
-           [
-               batch_losses[key]
-               for key in batch_losses.keys()
-           ]
+            [
+                batch_losses[key]
+                for key in batch_losses.keys()
+            ]
         )
 
         return batch_losses
@@ -97,7 +99,7 @@ class Iterator(TemplateIterator):
 
         if self.encoder_2:
             if self.variational:
-                predictions, mu, logvar, mu2, logvar2 = model(inputs0, inputs1)
+                predictions, mu, logvar = model(inputs0, inputs1)
             else:
                 predictions = model(inputs0, inputs1)
         else:
@@ -109,7 +111,7 @@ class Iterator(TemplateIterator):
         # Target heatmaps, predicted heatmaps, gt_coords
         if self.variational:
             if self.encoder_2:
-                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, mu2, logvar2)
+                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
             else:
                 losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
         else:
@@ -124,8 +126,8 @@ class Iterator(TemplateIterator):
             from edflow.data.util import adjust_support
             logs = {
                 "images": {
-                    "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1"),
-                    "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1"),
+                    "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                 },
                 "scalars": {
                     "loss": losses["total"],
@@ -137,8 +139,8 @@ class Iterator(TemplateIterator):
                 logs["scalars"]["L2_loss"] = losses["L2_loss"]
             if self.config["losses"]["perceptual"]:
                 logs["scalars"]["perceptual"] = losses["perceptual"]
-            #if self.config["losses"]["KL"] and self.variational:
-            #    logs["scalars"]["KL"] = losses["KL"]
+            if self.config["losses"]["KL"] and self.variational:
+                logs["scalars"]["KL"] = losses["KL"]
             if self.config["losses"]["vgg"]:
                 logs["scalars"]["vgg"] = losses["vgg"]
             return logs
