@@ -1,0 +1,45 @@
+iterator: AnimalPose.train_animalnet.Iterator
+model: AnimalPose.models.AnimalPosenet
+batch_size: 16 # 32 on quattro
+num_steps: 60001
+lr: 0.0001
+cuda: true  # False -> use GPU
+ckpt_freq: 2000
+#Training methods
+# Encoder pretrained by torchvision
+pretrained: True
+load_self_pretrained_encoder:
+  active: False
+  path: "load_weights/PosNet18.ckpt"
+load_self_pretrained_decoder:
+  active: False
+  path: "load_weights/PosNet18.ckpt"
+resnet_type: 18 #18, 50,101,152
+encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
+encoder_2: True
+
+# True sets the encoder_1 variational
+variational:
+  active: True
+  kl_weight: 0.001
+
+# Losses
+losses:
+  L2: True
+  KL: True
+  perceptual: False
+  perceptual_network: "vgg" # alex, squeeze or vgg
+  perceptual_weight: 1.0
+  #VGGL1Loss
+  vgg: False
+  vgg_l1_alpha: 1.0
+  vgg_alpha: 1.0
+
+# logging
+integrations:
+  git:
+    active: False
+  wandb:
+    active: True
+  tensorboard:
+    active: True
