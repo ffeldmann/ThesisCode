@@ -17,9 +17,7 @@ animal_class = {"cats": 0,
                 "cows": 3,
                 "horses": 4,
                 "tigers": 5,
-                "domestic": 2,
-                "hellenic": 1
-                }
+                "domestic": 2}
 
 parts = {
     "L_Eye": 0,
@@ -59,7 +57,6 @@ class Animal_Sequence_Abstract(DatasetMixin):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
         self.sequence_length = 2  # if config.get("sequence_length", False) == False else config["sequence_length"]
-        #self.sc = Animal_Sequence(config)
         self.sc = SequenceDataset(Animal_Sequence(config), self.sequence_length, step=config["sequence_step_size"])
         # works if dataroot like "VOC2011/cats_meta"
         # TODO PROBABLY NOT CORRECT HERE
@@ -124,23 +121,13 @@ class Animal_Sequence_Abstract(DatasetMixin):
             self.data = self.sc
 
     def get_appearance_image(self, pid, fids):
-        """
-
-        Args:
-            pid: video id
-            fids: frame ids
-
-        Returns:
-
-        """
-        # Get frame id mask where
         fid_mask = np.invert(np.isin(self.data.labels["fid"], fids))
         try:
             valid_indices = np.argwhere((pid == self.data.labels["pid"]) & fid_mask)[0]
         except IndexError:
             valid_indices = np.argwhere((pid == self.data.labels["pid"]))[0]
         random_idx = np.random.choice(valid_indices)
-        return self.data[random_idx]
+        return self.data[random_idx]["target"]
 
     def get_parts(self):
         return parts
@@ -231,6 +218,7 @@ class AllAnimals_Sequence_Train(Animal_Sequence_Abstract):
             dataroot = "animals"
             if "synthetic" in config:
                 dataroot = "synthetic_animals"
+                animal = "domestic_sheep"  # TODO!
             try:
                 self.data += Animal_Sequence_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
             except:
@@ -246,6 +234,7 @@ class AllAnimals_Sequence_Validation(Animal_Sequence_Abstract):
             dataroot = "animals"
             if "synthetic" in config:
                 dataroot = "synthetic_animals"
+                animal = "domestic_sheep"  # TODO!
             try:
                 self.data += Animal_Sequence_Validation(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
             except:

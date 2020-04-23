@@ -21,7 +21,7 @@ class UnFlatten(nn.Module):
 
 
 class AnimalPosenet(ResPoseNet):
-    def __init__(self, config, variational=False):
+    def __init__(self, config):
         super(AnimalPosenet, self).__init__(config)
         self.config = config
         self.variational = config["variational"]["active"]
@@ -30,7 +30,7 @@ class AnimalPosenet(ResPoseNet):
             self.logger.info(f"Load self pretrained encoder from {path}")
             state_dict = torch.load(path, map_location="cuda")["model"]
             new_state_dict = {}
-            for k,v in state_dict.items():
+            for k, v in state_dict.items():
                 if k.startswith("backbone"):
                     name = k.replace("backbone.", "")
                     new_state_dict[name] = v
@@ -60,39 +60,49 @@ class AnimalPosenet(ResPoseNet):
                 Flatten(),
                 nn.Linear(2048 * 4 * 4, config["encoder_latent_dim"])
             )
-                                            )
+            )
 
         if config["encoder_2"]:
             self.backbone2 = self.backbone
         if config["resnet_type"] <= 38:
-            self.fc = nn.Linear(
-                config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 512 * 4 * 4)
+            # for resnet type 18, 38
+            self.fc = nn.Linear(config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 512 * 4 * 4)
         else:
+            # For resnet type 50, 101, 152
             self.fc = nn.Linear(
                 config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 2048 * 4 * 4)
+        if self.variational:
+            self.fcmu = nn.Linear(config["encoder_latent_dim"], config["encoder_latent_dim"])
+            self.fcvar = nn.Linear(config["encoder_latent_dim"], config["encoder_latent_dim"])
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
 
     def forward(self, x1, x2=None):
         if self.variational:
-            x1 = self.backbone(x1)
-            mu = x1
-            x1 = x1 + torch.randn_like(x1) * self.config["variational"]["kl_weight"]
+            x1 = self.backbone(x1)  # [1, 256]
+            mu, logvar = self.fcmu(x1), self.fcvar(x1)
+            x1 = self.reparameterize(mu, logvar)
             if x2 != None:
                 x2 = self.backbone2(x2)
                 x1x2 = torch.cat((x1, x2), dim=1)
+                # Reshape x1 for Upsampling
                 x1x2 = self.fc(x1x2).view(x1x2.size(0), -1, 4, 4)
-                return self.head(x1x2), mu, torch.ones_like(x1)
+                return self.head(x1x2), mu, logvar
             # Reshape x1 for Upsampling
             x1 = self.fc(x1).view(x1.size(0), -1, 4, 4)
-            return self.head(x1), mu, torch.ones_like(x1)
+            return self.head(x1), mu, logvar
         else:
             x1 = self.backbone(x1)
             if x2 != None:
                 x2 = self.backbone2(x2)
                 x1x2 = torch.cat((x1, x2), dim=1)
-                # unsqueeze x1 adding [B, C, 1,1]
-                # x1x2 = x1x2.unsqueeze(-1).unsqueeze(-1)
+                # Reshape x1 for Upsampling
                 x1x2 = self.fc(x1x2).view(x1.size(0), -1, 4, 4)
                 return self.head(x1x2)
+            # Reshape x1 for Upsampling
             x1 = self.fc(x1).view(x1.size(0), -1, 4, 4)
             return self.head(x1)
 

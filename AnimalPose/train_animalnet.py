@@ -9,6 +9,7 @@ from edflow.util import retrieve
 from AnimalPose.utils.loss_utils import MSELossInstances, VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
+import numpy as np
 
 
 class Iterator(TemplateIterator):
@@ -20,12 +21,14 @@ class Iterator(TemplateIterator):
         self.device = "cuda" if self.cuda else "cpu"
         self.variational = self.config["variational"]["active"]
         self.encoder_2 = True if self.config["encoder_2"] else False
+        self.kl_weight = self.config["variational"]["kl_weight"]
         # vgg loss
         if self.config["losses"]["vgg"]:
             self.vggL1 = VGGLossWithL1(gpu_ids=[0],
                                        l1_alpha=self.config["losses"]["vgg_l1_alpha"],
                                        vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
-
+        if self.config["losses"]["KL"]:
+            self.klloss = torch.nn.KLDivLoss(reduction="batchmean")
         # initalize perceptual loss if possible
         if self.config["losses"]["perceptual"]:
             net = self.config["losses"]["perceptual_network"]
@@ -64,9 +67,8 @@ class Iterator(TemplateIterator):
             batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
             assert self.config["losses"]["L2"], "L2 loss necessary here!"
-            #KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            KLD = 0.1 * torch.sum(mu.pow(2))
-            batch_losses["KL"] = KLD
+            KLD = 0.5 * torch.sum(torch.exp(logvar) + mu ** 2 - 1. - logvar)
+            batch_losses["KL"] = KLD * self.kl_weight
 
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
@@ -84,6 +86,17 @@ class Iterator(TemplateIterator):
         return batch_losses
 
     def step_op(self, model, **kwargs):
+        if self.get_global_step() % 500 == 0 and self.get_global_step() != 0:
+            # self.logger.info(f"Global step: {self.get_global_step()}")
+            self.logger.info(f"Epoch step:  {self.get_epoch_step()}")
+            prev = self.kl_weight
+
+            if self.config["variational"]["decay"]:
+                self.kl_weight = self.kl_weight * 0.9
+            else:
+                self.kl_weight = self.kl_weight * 1.1
+
+            self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
@@ -100,6 +113,10 @@ class Iterator(TemplateIterator):
         if self.encoder_2:
             if self.variational:
                 predictions, mu, logvar = model(inputs0, inputs1)
+                # Do only in test
+                if not is_train:
+                    inputs1_flipped = torch.flip(inputs1, [0])  # flip the tensor in zero dimension
+                    kl_test_preds, _, _ = model(inputs0, inputs1_flipped)
             else:
                 predictions = model(inputs0, inputs1)
         else:
@@ -107,6 +124,7 @@ class Iterator(TemplateIterator):
                 predictions, mu, logvar = model(inputs0)
             else:
                 predictions = model(inputs0)
+
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
         if self.variational:
@@ -124,6 +142,7 @@ class Iterator(TemplateIterator):
 
         def log_op():
             from edflow.data.util import adjust_support
+            is_train = self.get_split() == "train"
             logs = {
                 "images": {
                     "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
@@ -133,8 +152,17 @@ class Iterator(TemplateIterator):
                     "loss": losses["total"],
                 },
             }
+
             if self.encoder_2:
-                logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1")
+                logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
+                                                                 "0->1")
+                if not is_train:
+                    logs["images"]["image_input_1_flipped"] = adjust_support(
+                        torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
+                    logs["images"]["pose_reconstruction"] = adjust_support(
+                        torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1")
+            if self.kl_weight:
+                logs["scalars"]["kl_weight"] = self.kl_weight
             if self.config["losses"]["L2"]:
                 logs["scalars"]["L2_loss"] = losses["L2_loss"]
             if self.config["losses"]["perceptual"]:

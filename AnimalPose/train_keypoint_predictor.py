@@ -148,11 +148,44 @@ class Iterator(TemplateIterator):
             return logs
 
         def eval_op():
-            # return {
-            # "outputs": np.array(predictions.cpu().detach().numpy()),
-            # TODO in which shape is the outputs necessary for evaluation?
-            # "labels": {k: [v.cpu().detach().numpy()] for k, v in losses["batch"].items()},
-            # }
-            return
-
+            return {
+             "predictions": np.array(predictions.cpu().detach().numpy()),
+            }
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
+
+    # def eval_callback(self, root, data_in, data_out, config):
+    #     logger = get_logger("eval_callback")
+    #
+    #     prefix = "edeval/target_step_{}/".format(config["target_frame_step"])
+    #
+    #     losses = {
+    #         prefix + k.replace("--", "/"): v.mean()
+    #         for k, v in data_out.labels.items()
+    #         if "losses--" in k
+    #     }
+    #
+    #     for k, v in losses.items():
+    #         logger.info("{}: {}".format(k, v))
+    #
+    #     if (
+    #             config.get("edeval_update_wandb_summary", True)
+    #             and config["integrations"]["wandb"]["active"]
+    #     ):
+    #         import wandb
+    #
+    #         api = wandb.Api()
+    #
+    #         run_name = root.split("/eval/")[0]
+    #         this_run = None
+    #         runs = api.runs("hperrot/flowframegen")
+    #         for run in runs:
+    #             if run.name == run_name:
+    #                 this_run = run
+    #         logger.info("run name: {}".format(this_run.name))
+    #         for k, v in losses.items():
+    #             this_run.summary[k] = v
+    #         this_run.summary.update()
+    #
+    # @property
+    # def callbacks(self):
+    #     return {"eval_op": {"cb": self.eval_callback}}
