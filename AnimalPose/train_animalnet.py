@@ -66,13 +66,14 @@ class Iterator(TemplateIterator):
         if self.config["losses"]["L2"]:
             batch_losses["L2_loss"] = crit(torch.from_numpy(targets), predictions.cpu()).to(self.device)
         if self.variational:
-            assert self.config["losses"]["L2"], "L2 loss necessary here!"
+            # assert self.config["losses"]["L2"], "L2 loss necessary here!"
             KLD = 0.5 * torch.sum(torch.exp(logvar) + mu ** 2 - 1. - logvar)
             batch_losses["KL"] = KLD * self.kl_weight
 
         if self.config["losses"]["perceptual"]:
-            batch_losses["perceptual"] = self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
-                                                              predictions.to(self.device))
+            batch_losses["perceptual"] = torch.mean(
+                self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
+                                     predictions.to(self.device)))
         if self.config["losses"]["vgg"]:
             batch_losses["vgg"] = self.vggL1(torch.from_numpy(targets).float().to(self.device),
                                              predictions.to(self.device))
@@ -86,20 +87,21 @@ class Iterator(TemplateIterator):
         return batch_losses
 
     def step_op(self, model, **kwargs):
-        if self.get_global_step() % 500 == 0 and self.get_global_step() != 0:
-            # self.logger.info(f"Global step: {self.get_global_step()}")
-            self.logger.info(f"Epoch step:  {self.get_epoch_step()}")
-            prev = self.kl_weight
-
-            if self.config["variational"]["decay"]:
-                self.kl_weight = self.kl_weight * 0.9
-            else:
-                self.kl_weight = self.kl_weight * 1.1
-
-            self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
+        if self.get_global_step() % 500 == 0 and self.get_global_step() != 0 and is_train:
+            if self.variational:
+                # self.logger.info(f"Global step: {self.get_global_step()}")
+                self.logger.info(f"Global step: {self.get_global_step()}")
+                prev = self.kl_weight
+                if self.config["variational"]["decay"]:
+                    self.kl_weight = self.kl_weight * 0.99
+                    self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
+                else:
+                    self.kl_weight = self.kl_weight * 1.01
+                    self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
+
 
         # TODO need (batch_size, channel, width, height)
         # (batch_size, width, height, channel)
