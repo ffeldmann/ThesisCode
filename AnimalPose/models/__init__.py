@@ -6,3 +6,4 @@ from .hourglass_keypoint import HourglassNet
 from .animalnet import AnimalNet, AnimalPosenet
 from .resnet import ResnetTorchVisionClass
 from .cross_domain import CrossDomain
+from .disentanglement_monochrome import DisentangleMonochrome

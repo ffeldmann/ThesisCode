@@ -1,6 +1,6 @@
-iterator: AnimalPose.train_animalnet.Iterator
-model: AnimalPose.models.AnimalPosenet
-batch_size: 16 # 32 on quattro
+iterator: AnimalPose.train_disentanglement_monochrome.Iterator
+model: AnimalPose.models.DisentangleMonochrome
+batch_size: 8 # 32 on quattro
 num_steps: 80001
 lr: 0.0001
 cuda: True  # False -> use GPU
@@ -14,20 +14,14 @@ load_self_pretrained_encoder:
 load_self_pretrained_decoder:
   active: False
   path: "load_weights/PosNet18.ckpt"
-resnet_type: 50 #18, 50, 101,152
+resnet_type: 18 #18, 50, 101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
 encoder_2: True
 
-# True sets the encoder_1 variational
-variational:
-  active: True
-  kl_weight: 1 #0.000001
-  decay: True
-
 # Losses
 losses:
+  L1: False
   L2: False
-  KL: True
   perceptual: True
   perceptual_network: "vgg" # alex, squeeze or vgg
   perceptual_weight: 1.0
