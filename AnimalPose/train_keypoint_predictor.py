@@ -10,10 +10,13 @@ from edflow.data.util import adjust_support
 from AnimalPose.data.util import make_stickanimal
 from AnimalPose.utils.image_utils import heatmaps_to_coords, heatmaps_to_image
 from AnimalPose.utils.log_utils import plot_input_target_keypoints
-from AnimalPose.utils.loss_utils import percentage_correct_keypoints
+from AnimalPose.utils.loss_utils import percentage_correct_keypoints, VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
+from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
+
 import torchvision.transforms as transforms
+
 
 class Iterator(TemplateIterator):
     def __init__(self, *args, **kwargs):
@@ -35,6 +38,23 @@ class Iterator(TemplateIterator):
         # self.normalize = torchvision.transforms.Normalize(mean=self.mean, std=self.std)
         if self.cuda:
             self.model.cuda()
+
+        self.freeze_encoder()
+
+        # vgg loss
+        if self.config["losses"]["vgg"]:
+            self.vggL1 = VGGLossWithL1(gpu_ids=[0],
+                                       l1_alpha=self.config["losses"]["vgg_l1_alpha"],
+                                       vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
+
+        # initalize perceptual loss if possible
+        if self.config["losses"]["perceptual"]:
+            net = self.config["losses"]["perceptual_network"]
+            assert net in ["alex", "squeeze",
+                           "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
+            self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
+                self.device)
+
         # hooks
         # if self.config["adjust_learning_rate"]:
         #    self.hooks.append(
@@ -61,6 +81,14 @@ class Iterator(TemplateIterator):
         batch_losses = {}
         if self.config["losses"]["L2"]:
             batch_losses["L2"] = self.mse_loss(targets, predictions.cpu())
+            batch_losses["L2"] += self.mse_loss(
+                torch.from_numpy(heatmaps_to_image(targets.numpy())),
+                torch.from_numpy(heatmaps_to_image(predictions.detach().cpu().numpy())))
+        if self.config["losses"]["perceptual"]:
+            batch_losses["perceptual"] = torch.mean(
+                self.perceptual_loss(torch.from_numpy(heatmaps_to_image(targets.numpy())),
+                                     torch.from_numpy(heatmaps_to_image(predictions.detach().cpu().numpy())),
+                                     True)).cpu()
         batch_losses["total"] = sum(
             [
                 batch_losses[key]
@@ -69,10 +97,22 @@ class Iterator(TemplateIterator):
         )
         return batch_losses
 
+    def freeze_encoder(self):
+        self.logger.info("Encoder freezed!")
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
+
+    def unfreeze_encoder(self):
+        self.logger.info("Encoder unfreezed!")
+        for param in self.model.backbone.parameters():
+            param.requires_grad = True
+
     def step_op(self, model, **kwargs):
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
+        if self.get_global_step() == self.config["freeze_encoder_for"] and is_train:
+            self.unfreeze_encoder()
 
         # kwargs["inp"]
         # (batch_size, width, height, channel)
@@ -99,6 +139,7 @@ class Iterator(TemplateIterator):
         def log_op():
 
             PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
+            HM_THRESH = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
             if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
 
             coords, _ = heatmaps_to_coords(predictions.clone(), thresh=self.config["hm"]["thresh"])
@@ -120,7 +161,8 @@ class Iterator(TemplateIterator):
                                               "-1->1", "0->1"),
                     "targets": adjust_support(heatmaps_to_image(kwargs["targets"]).transpose(0, 2, 3, 1), "-1->1"),
                     "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
-                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), predictions.clone()),
+                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), predictions.clone(),
+                                                    thresh=self.config["hm"]["thresh"]),
                 },
                 "scalars": {
                     "loss": losses["total"],
@@ -138,54 +180,21 @@ class Iterator(TemplateIterator):
                 logs["scalars"]["L2"] = losses["L2"]
             if self.config["losses"]["L1"]:
                 logs["scalars"]["L1"] = losses["L1"]
+            if self.config["losses"]["perceptual"]:
+                logs["scalars"]["perceptual"] = losses["perceptual"]
 
             if self.config["pck"]["pck_multi"]:
                 for key, val in pck.items():
                     # get mean value for pck at given threshold
-                    logs["scalars"][f"PCK@_{key}"] = np.around(val[0], 5)
-                for idx, part in enumerate(val[1]):
-                    logs["scalars"][f"PCK@_{key}_{self.dataset.get_idx_parts(idx)}"] = np.around(part, 5)
+                    logs["scalars"][f"PCK@{key}"] = np.around(val[0], 5)
+                    for idx, part in enumerate(val[1]):
+                        logs["scalars"][f"PCK@{key}_{self.dataset.get_idx_parts(idx)}"] = np.around(part, 5)
             return logs
 
         def eval_op():
             return {
-             "predictions": np.array(predictions.cpu().detach().numpy()),
+                #    "gt_kps": np.array(kwargs["kps"]),
+                #    "predictions": np.array(predictions.cpu().detach().numpy()),
             }
-        return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
 
-    # def eval_callback(self, root, data_in, data_out, config):
-    #     logger = get_logger("eval_callback")
-    #
-    #     prefix = "edeval/target_step_{}/".format(config["target_frame_step"])
-    #
-    #     losses = {
-    #         prefix + k.replace("--", "/"): v.mean()
-    #         for k, v in data_out.labels.items()
-    #         if "losses--" in k
-    #     }
-    #
-    #     for k, v in losses.items():
-    #         logger.info("{}: {}".format(k, v))
-    #
-    #     if (
-    #             config.get("edeval_update_wandb_summary", True)
-    #             and config["integrations"]["wandb"]["active"]
-    #     ):
-    #         import wandb
-    #
-    #         api = wandb.Api()
-    #
-    #         run_name = root.split("/eval/")[0]
-    #         this_run = None
-    #         runs = api.runs("hperrot/flowframegen")
-    #         for run in runs:
-    #             if run.name == run_name:
-    #                 this_run = run
-    #         logger.info("run name: {}".format(this_run.name))
-    #         for k, v in losses.items():
-    #             this_run.summary[k] = v
-    #         this_run.summary.update()
-    #
-    # @property
-    # def callbacks(self):
-    #     return {"eval_op": {"cb": self.eval_callback}}
+        return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
