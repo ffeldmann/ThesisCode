@@ -73,7 +73,7 @@ class Iterator(TemplateIterator):
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = torch.mean(
                 self.perceptual_loss(torch.from_numpy(targets).float().to(self.device),
-                                     predictions.to(self.device)))
+                                     predictions.to(self.device), True))
         if self.config["losses"]["vgg"]:
             batch_losses["vgg"] = self.vggL1(torch.from_numpy(targets).float().to(self.device),
                                              predictions.to(self.device))
@@ -99,7 +99,7 @@ class Iterator(TemplateIterator):
                     self.kl_weight = self.kl_weight * 0.99
                     self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
                 else:
-                    self.kl_weight = self.kl_weight * 1.01
+                    self.kl_weight = self.kl_weight * 1.001
                     self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
 
 
