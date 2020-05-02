@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
+import cv2
 from edflow import get_logger
 from edflow.data.util import adjust_support
 
@@ -119,7 +120,12 @@ def apply_threshold_to_heatmaps(heatmaps: torch.tensor, thresh: float):
     return heatmaps
 
 
-def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
+def write_tensor_image(tensor):
+    for idx, img in enumerate(tensor):
+        cv2.imwrite(f"file_{idx}.png", img * 255)
+
+
+def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = 0):
     """
     Get predictions from heatmaps in torch Tensor.
 
@@ -132,12 +138,7 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     """
     heatmaps = sure_to_torch(heatmaps)
-    # if thresh != None:
-    #     # assert thresh > 0 or thresh < 1, f"Thresh must be in range [0, 1], got {thresh}"
-    #     # Get the indices where the values are smaller then the threshold
-    #     indices = heatmaps < thresh
-    #     # Set these values to 0
-    #     heatmaps[indices] = 0
+
     assert heatmaps.dim() == 4, 'Heatmaps should be 4-dim'
     maxval, idx = torch.max(heatmaps.view(heatmaps.size(0), heatmaps.size(1), -1), 2)
 
@@ -151,4 +152,12 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = None):
 
     pred_mask = maxval.gt(0).repeat(1, 1, 2).float()
     preds *= pred_mask
+
+    if thresh != 0:
+        assert thresh > 0 or thresh <= 1, f"Thresh must be in range [0, 1], got {thresh}"
+        # Get the indices where the values are smaller then the threshold
+        indices = maxval >= thresh
+        # Set these values to 0
+        preds[indices.squeeze(-1)] = 0
+
     return preds, maxval

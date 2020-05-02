@@ -100,7 +100,7 @@ def make_heatmaps(image, keypoints, sigma=0.5):
     return hm
 
 
-def make_stickanimal(image, predictions):
+def make_stickanimal(image, predictions, thresh=0):
     """
     Args:
         image: batch of images [B, W, H, C]
@@ -113,9 +113,11 @@ def make_stickanimal(image, predictions):
     image = adjust_support(np.copy(image), "0->255").astype(np.uint8)
     if predictions.shape[-1] != 2:
         # Predictions to Keypoints
-        coords, maxval = heatmaps_to_coords(torch2numpy(predictions))
+        coords, _ = heatmaps_to_coords(torch2numpy(predictions), thresh=thresh)
     else:
         coords = predictions
+
+    # TODO: why do we have no keypoints anymore?!
 
     joints = [
         # Head
@@ -127,8 +129,8 @@ def make_stickanimal(image, predictions):
         # Body
         [8, 9],  # Throat - L_F_Elbow
         [8, 5],  # Throat - R_F_Elbow
-        [9, 10],   # L_F_Elbow - Withers
-        [5, 10],   # R_F_Elbow - Withers
+        [9, 10],  # L_F_Elbow - Withers
+        [5, 10],  # R_F_Elbow - Withers
         # Front
         [9, 16],  # L_F_Elbow - L_F_Knee
         [16, 6],  # L_F_Knee - L_F_Paw
