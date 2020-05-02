@@ -32,7 +32,7 @@ class Iterator(TemplateIterator):
             net = self.config["losses"]["perceptual_network"]
             assert net in ["alex", "squeeze",
                            "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
-            self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
+            self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=True).to(
                 self.device)
         if self.cuda:
             self.model.cuda()
@@ -67,7 +67,7 @@ class Iterator(TemplateIterator):
             batch_losses["L2"] = self.mseloss(targets, predictions)
         if self.config["losses"]["perceptual"]:
             batch_losses["perceptual"] = torch.mean(
-                self.perceptual_loss(targets, predictions))
+                self.perceptual_loss(targets, predictions, True))
         if self.config["losses"]["vgg"]:
             batch_losses["vgg"] = self.vggL1(targets, predictions.to(self.device))
         batch_losses["total"] = sum(
@@ -96,15 +96,16 @@ class Iterator(TemplateIterator):
         # Mixed Reconstruction
         mixed_reconstruction = model(enc_appearance=appearance1, enc_pose=pose0, mixed_reconstruction=True)
         # cycle consistency
-        appearance_recon, pose_recon = model(mixed_reconstruction, enc_appearance=appearance0, enc_pose=pose1,
-                                             cycle=True)
+        appearance_recon, pose_recon, latent_appearance, latent_pose = model(mixed_reconstruction,
+                                                                             enc_appearance=appearance0, enc_pose=pose1,
+                                                                             cycle=True)
 
         loss = 0
-        loss += self.criterion(inputs0, pred0)
-        loss += self.criterion(inputs1, pred1)
+        loss += self.criterion(inputs0, pred0) * 1
+        loss += self.criterion(inputs1, pred1) * 1
         recon_loss = 0
-        recon_loss += self.criterion(appearance_recon, inputs0)
-        recon_loss += self.criterion(pose_recon, inputs1)
+        recon_loss += self.criterion(appearance_recon, inputs0) * 1
+        recon_loss += self.criterion(pose_recon, inputs1) * 1
 
         def train_op():
             self.optimizer.zero_grad()
@@ -112,9 +113,14 @@ class Iterator(TemplateIterator):
             # # Freeze pose encoder
             for param in model.backbone.parameters():
                 param.requires_grad = False
+            # freeze decoder
+            for param in model.head.parameters():
+                param.requires_grad = False
             recon_loss.backward()
             # # release pose encoder weights
             for param in model.backbone.parameters():
+                param.requires_grad = True
+            for param in model.head.parameters():
                 param.requires_grad = True
             self.optimizer.step()
 

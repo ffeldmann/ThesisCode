@@ -71,7 +71,7 @@ class DisentangleMonochrome(ResPoseNet):
             # For resnet type 50, 101, 152
             self.fc = nn.Linear(config["encoder_latent_dim"] * 2, 2048 * 4 * 4)
 
-    def forward(self, input=None, enc_appearance=None, enc_pose=None, mixed_reconstruction=False, cycle=False):
+    def forward(self, input=None, input2=None, enc_appearance=None, enc_pose=None, mixed_reconstruction=False, cycle=False):
         # FIRST ALWAYS APPEARANCE; SECOND ALWAYS POSE!
         # "backbone" pose encoder
         # "backbone2" appearance encoder
@@ -83,7 +83,10 @@ class DisentangleMonochrome(ResPoseNet):
             return self.head(latent)
 
         appearance = self.backbone2(input)
-        pose = self.backbone(input)
+        if input2 != None:
+            pose = self.backbone(input)
+        else:
+            pose = self.backbone(input)
 
         if enc_appearance != None and enc_pose != None and cycle:
             # cycle consistency (c)
@@ -96,7 +99,7 @@ class DisentangleMonochrome(ResPoseNet):
             latent_thumb = self.fc(latent_thumb).view(latent_thumb.size(0), -1, 4, 4)
             recon_thumb = self.head(latent_thumb)
 
-            return recon_hand, recon_thumb
+            return recon_hand, recon_thumb, appearance, pose
 
         latent = torch.cat((appearance, pose), dim=1)
         # Reshape latent for Upsampling

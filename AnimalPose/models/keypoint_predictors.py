@@ -3,11 +3,13 @@ from __future__ import division
 from __future__ import print_function
 
 import torch.nn as nn
+import torch
 import torchvision.models as models
 from edflow import get_logger
 from torchvision.models.resnet import BasicBlock, Bottleneck
 from torchvision.models.resnet import model_urls
 from torch.utils import model_zoo
+
 
 class ResnetTorchVisionKeypoints(nn.Module):
     def __init__(self, config):
@@ -151,7 +153,7 @@ class DeconvHead(nn.Module):
         self.features = nn.ModuleList()
         for i in range(num_layers):
             _in_channels = in_channels if i == 0 else num_filters
-            #self.features.append(
+            # self.features.append(
             #    nn.ConvTranspose2d(_in_channels, num_filters, kernel_size=kernel_size, stride=2, padding=padding,
             #                       output_padding=output_padding, bias=False))
             self.features.append(nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True))
@@ -205,13 +207,38 @@ class ResPoseNet(nn.Module):
             num_deconv_filters, num_deconv_kernel,
             final_conv_kernel, config['n_classes'], depth_dim
         )
-        if config["pretrained"]:
+        if config["pretrained"] and not config["load_self_pretrained_encoder"]["active"]:
             self.logger.info(f"Init {name} Network from model zoo.")
             org_resnet = model_zoo.load_url(model_urls[name])
             # drop orginal resnet fc layer, add 'None' in case of no fc layer, that will raise error
             org_resnet.pop('fc.weight', None)
             org_resnet.pop('fc.bias', None)
             self.backbone.load_state_dict(org_resnet)
+        if config["load_self_pretrained_encoder"]["active"]:
+            path = config["load_self_pretrained_encoder"]["path"]
+            self.logger.info(f"Init encoder from pretraind path: {path}.")
+            state_dict = torch.load(path, map_location="cuda")["model"]
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("backbone."):
+                    name = k.replace("backbone.", "")
+                    new_state_dict[name] = v
+            new_state_dict.pop("layer4.fc.1.weight", None)
+            new_state_dict.pop("layer4.fc.1.bias", None)
+            self.backbone.load_state_dict(new_state_dict, strict=True)
+
+        if config["load_self_pretrained_decoder"]["active"]:
+            path = config["load_self_pretrained_decoder"]["path"]
+            self.logger.info(f"Init decoder from pretraind path: {path}.")
+            state_dict = torch.load(path, map_location="cuda")["model"]
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("head."):
+                    name = k.replace("head.", "")
+                    new_state_dict[name] = v
+            new_state_dict["features.20.weight"] = self.head.features[20].weight
+            new_state_dict["features.20.bias"] = self.head.features[20].bias
+            self.head.load_state_dict(new_state_dict, strict=True)
 
     def forward(self, x):
         x = self.backbone(x)
