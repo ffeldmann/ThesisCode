@@ -16,7 +16,6 @@ load_self_pretrained_decoder:
   path: "load_weights/PosNet18.ckpt"
 resnet_type: 18 #18, 50, 101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
-encoder_2: True
 
 # Losses
 losses:

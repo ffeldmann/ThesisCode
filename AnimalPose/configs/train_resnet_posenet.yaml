@@ -1,7 +1,7 @@
 iterator: AnimalPose.train_keypoint_predictor.Iterator
 model: AnimalPose.models.ResPoseNet
 batch_size: 16
-num_steps: 20001
+num_steps: 40001
 lr: 0.0001
 cuda: true  # False -> use GPU
 ckpt_freq: 2000
@@ -9,25 +9,39 @@ ckpt_freq: 2000
 pretrained: True
 resnet_type: 18 #50,101,152
 adjust_learning_rate: False
+# Pretraining!
+load_self_pretrained_encoder:
+  active: False
+  path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
+load_self_pretrained_decoder:
+  active: False
+  path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
+# Encoder is frozen by default
+freeze_encoder_for: 1 #steps helps to train the decoder in first place
+
 
 #### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!
 # Heatmap
 hm:
   # we consider a keypoint to be a keypoint only above thresh
-  thresh: 0.8
+  thresh: 0.3
 # PCK
 pck:
-    thresh: 0.5
-    pck_multi: True
-    type: "object" # "object" or "image"
+  pck_multi: True
+  type: "object" # "object" or "image"
+
 # Losses
 losses:
-    L1: False
-    L2: True
-    KL: False
-    perceptual: False
-    perceptual_network: "vgg" # alex, squeeze or vgg
-    perceptual_weight: 1.0
+  L1: False
+  L2: True
+  KL: False
+  perceptual: True
+  perceptual_network: "vgg" # alex, squeeze or vgg
+  perceptual_weight: 1.0
+  #VGGL1Loss
+  vgg: False
+  vgg_l1_alpha: 1.0
+  vgg_alpha: 1.0
 # logging
 integrations:
   git:

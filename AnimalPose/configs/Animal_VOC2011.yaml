@@ -9,4 +9,4 @@ augmentation: True
 train_size: 0.8
 random_state: 42
 pck_alpha: 0.5
-pck_multi: False
+pck_multi: True
