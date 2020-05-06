@@ -11,20 +11,20 @@ resnet_type: 18 #50,101,152
 adjust_learning_rate: False
 # Pretraining!
 load_self_pretrained_encoder:
-  active: False
+  active: True
   path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
 load_self_pretrained_decoder:
   active: False
   path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
 # Encoder is frozen by default
-freeze_encoder_for: 1 #steps helps to train the decoder in first place
+freeze_encoder_for: 1000 #steps helps to train the decoder in first place
 
 
 #### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!
 # Heatmap
 hm:
   # we consider a keypoint to be a keypoint only above thresh
-  thresh: 0.3
+  thresh: 0.01 # 0.01 is a good choice, removes noise in the heatmaps
 # PCK
 pck:
   pck_multi: True

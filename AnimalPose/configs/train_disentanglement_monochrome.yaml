@@ -16,12 +16,22 @@ load_self_pretrained_decoder:
   path: "load_weights/PosNet18.ckpt"
 resnet_type: 18 #18, 50, 101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
+decoder_2: True
+
+# Heatmap
+hm:
+  # we consider a keypoint to be a keypoint only above thresh
+  thresh: 0.01 # 0.01 is a good choice, removes noise in the heatmaps
+# PCK
+pck:
+  pck_multi: True
+  type: "object" # "object" or "image"
 
 # Losses
 losses:
   L1: False
-  L2: False
-  perceptual: True
+  L2: True
+  perceptual: False
   perceptual_network: "vgg" # alex, squeeze or vgg
   perceptual_weight: 1.0
   #VGGL1Loss
