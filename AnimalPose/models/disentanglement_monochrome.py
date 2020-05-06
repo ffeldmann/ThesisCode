@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from AnimalPose.models import ResPoseNet
+import copy
 
 
 class Flatten(nn.Module):
@@ -49,6 +50,11 @@ class DisentangleMonochrome(ResPoseNet):
             self.head.load_state_dict(new_state_dict, strict=False)
         self.head.features[20] = nn.Conv2d(256, 3, kernel_size=1, stride=1)
 
+        if self.config["decoder_2"]:
+            self.head2 = copy.deepcopy(self.head)
+            self.head2.features[1] = nn.Conv2d(256, 256, kernel_size=1, stride=1)
+            self.head2.features[20] = nn.Conv2d(256, self.config["n_classes"], kernel_size=1, stride=1)
+
         # resnet 18 / 34 need different input resnet 50/101/152 : 2048
         if config["resnet_type"] <= 38:
             self.backbone.layer4.add_module("fc", nn.Sequential(
@@ -66,15 +72,19 @@ class DisentangleMonochrome(ResPoseNet):
 
         if config["resnet_type"] <= 38:
             # for resnet type 18, 38
+            self.fc_heatmaps = nn.Linear(config["encoder_latent_dim"], 256 * 4 * 4)
             self.fc = nn.Linear(config["encoder_latent_dim"] * 2, 512 * 4 * 4)
         else:
             # For resnet type 50, 101, 152
             self.fc = nn.Linear(config["encoder_latent_dim"] * 2, 2048 * 4 * 4)
 
-    def forward(self, input=None, input2=None, enc_appearance=None, enc_pose=None, mixed_reconstruction=False, cycle=False):
+    def forward(self, input=None, input2=None, enc_appearance=None, enc_pose=None, mixed_reconstruction=False,
+                cycle=False, heatmap=False):
         # FIRST ALWAYS APPEARANCE; SECOND ALWAYS POSE!
-        # "backbone" pose encoder
-        # "backbone2" appearance encoder
+        # "backbone" -> pose encoder
+        # "backbone2" -> appearance encoder
+        # "head" -> image reconstruction
+        # "head2" -> heatmaps
 
         if enc_appearance != None and enc_pose != None and mixed_reconstruction:
             # mix reconstruction (b)
@@ -91,16 +101,19 @@ class DisentangleMonochrome(ResPoseNet):
         if enc_appearance != None and enc_pose != None and cycle:
             # cycle consistency (c)
 
-            latent_hand = torch.cat((enc_appearance, pose), dim=1)
-            latent_hand = self.fc(latent_hand).view(latent_hand.size(0), -1, 4, 4)
-            recon_hand = self.head(latent_hand)
+            pose_concat = torch.cat((enc_appearance, pose), dim=1)
+            pose_concat = self.fc(pose_concat).view(pose_concat.size(0), -1, 4, 4)
+            recon_pose = self.head(pose_concat)
 
-            latent_thumb = torch.cat((appearance, enc_pose), dim=1)
-            latent_thumb = self.fc(latent_thumb).view(latent_thumb.size(0), -1, 4, 4)
-            recon_thumb = self.head(latent_thumb)
+            appearance_concat = torch.cat((appearance, enc_pose), dim=1)
+            appearance_concat = self.fc(appearance_concat).view(appearance_concat.size(0), -1, 4, 4)
+            recon_appearance = self.head(appearance_concat)
 
-            return recon_hand, recon_thumb, appearance, pose
+            return recon_pose, recon_appearance, appearance, pose
 
+        if heatmap:
+            latent = self.fc_heatmaps(pose).view(pose.size(0), -1, 4, 4)
+            return self.head2(latent)
         latent = torch.cat((appearance, pose), dim=1)
         # Reshape latent for Upsampling
         latent = self.fc(latent).view(latent.size(0), -1, 4, 4)
