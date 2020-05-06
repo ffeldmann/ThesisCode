@@ -22,6 +22,10 @@ class Iterator(TemplateIterator):
         self.variational = self.config["variational"]["active"]
         self.encoder_2 = True if self.config["encoder_2"] else False
         self.kl_weight = self.config["variational"]["kl_weight"]
+
+        self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"]["start_step"], \
+                                                                               self.config["num_steps"], self.kl_weight, \
+                                                                               self.config["variational"]["stop_weight"]
         # vgg loss
         if self.config["losses"]["vgg"]:
             self.vggL1 = VGGLossWithL1(gpu_ids=[0],
@@ -90,7 +94,7 @@ class Iterator(TemplateIterator):
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
-        if self.get_global_step() % 500 == 0 and self.get_global_step() != 0 and is_train:
+        if self.get_global_step() >= self.start_step and is_train:
             if self.variational:
                 # self.logger.info(f"Global step: {self.get_global_step()}")
                 self.logger.info(f"Global step: {self.get_global_step()}")
@@ -98,12 +102,12 @@ class Iterator(TemplateIterator):
                 if self.config["variational"]["decay"]:
                     self.kl_weight = self.kl_weight * 0.99
                     self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
-                else:
-                    self.kl_weight = self.kl_weight * 1.001
+                else:  # start_step, stop_step, start_weight, stop_weight
+                    relative_global_step = self.get_global_step() - self.start_step
+                    self.kl_weight = self.start_weight + ((self.stop_weight - self.start_weight) * (
+                            relative_global_step / (self.stop_step - self.start_step)))  # * 1.001
                     self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
 
-
-        # TODO need (batch_size, channel, width, height)
         # (batch_size, width, height, channel)
         inputs0 = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
         if self.encoder_2:
@@ -158,7 +162,7 @@ class Iterator(TemplateIterator):
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
                                                                  "0->1")
-                if not is_train:
+                if not is_train and self.variational:
                     logs["images"]["image_input_1_flipped"] = adjust_support(
                         torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
                     logs["images"]["pose_reconstruction"] = adjust_support(
