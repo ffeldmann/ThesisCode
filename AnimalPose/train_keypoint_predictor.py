@@ -192,9 +192,9 @@ class Iterator(TemplateIterator):
             return logs
 
         def eval_op():
-            return {
+            return #{
                 #    "gt_kps": np.array(kwargs["kps"]),
                 #    "predictions": np.array(predictions.cpu().detach().numpy()),
-            }
+            #}
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}

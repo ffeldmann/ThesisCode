@@ -156,8 +156,7 @@ def heatmaps_to_coords(heatmaps: torch.tensor, thresh: float = 0):
     if thresh != 0:
         assert thresh > 0 or thresh <= 1, f"Thresh must be in range [0, 1], got {thresh}"
         # Get the indices where the values are smaller then the threshold
-        indices = maxval >= thresh
+        indices = maxval <= thresh
         # Set these values to 0
         preds[indices.squeeze(-1)] = 0
-
     return preds, maxval
