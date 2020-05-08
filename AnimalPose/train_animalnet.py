@@ -9,6 +9,7 @@ from edflow.util import retrieve
 from AnimalPose.utils.loss_utils import MSELossInstances, VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
+from AnimalPose.utils import LossConstrained
 import numpy as np
 
 
@@ -26,6 +27,7 @@ class Iterator(TemplateIterator):
         self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"]["start_step"], \
                                                                                self.config["num_steps"], self.kl_weight, \
                                                                                self.config["variational"]["stop_weight"]
+        self.loss_constrained = LossConstrained()
         # vgg loss
         if self.config["losses"]["vgg"]:
             self.vggL1 = VGGLossWithL1(gpu_ids=[0],
