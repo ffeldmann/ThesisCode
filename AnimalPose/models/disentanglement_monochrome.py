@@ -8,7 +8,7 @@ import copy
 
 class Flatten(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), -1)
+        return input.reshape(input.size(0), -1)
 
 
 class UnFlatten(nn.Module):
@@ -18,7 +18,7 @@ class UnFlatten(nn.Module):
         self.dim1 = dim2
 
     def forward(self, input):
-        return input.view(input.size(0), -1, self.dim1, self.dim2)
+        return input.reshape(input.size(0), -1, self.dim1, self.dim2)
 
 
 class DisentangleMonochrome(ResPoseNet):

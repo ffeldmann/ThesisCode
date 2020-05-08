@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from edflow.util import retrieve
+from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 
 """
 mu ist hyperparameter wie stark der loss angepasst wird,
@@ -17,29 +18,36 @@ class LossConstrained(nn.Module):
         self.lambda_init = retrieve(config, "Loss/lambda_init", default=1.0)
         self.register_buffer("lambda_", torch.ones(size=()) * self.lambda_init)
         self.mu = retrieve(config, "Loss/mu", default=0.05)
-        self.eps = retrieve(config, "Loss/eps", default=30.72)  # mean of 0.01
+        self.eps = retrieve(config, "Loss/eps", default=0.1)#30.72)  # mean of 0.01
+        net = self.config["losses"]["perceptual_network"]
+        self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=True, spatial=False).to("cuda")
+        self.device = "cuda"
 
-    def forward(self, inputs, reconstructions, samples, posteriors, global_step):
-        rec_loss = (inputs - reconstructions) ** 2
+    def forward(self, inputs, reconstructions, mu, logvar, global_step):
+        # L2 Loss
+        #rec_loss = (inputs - reconstructions) ** 2
+        #rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
+        #rec_mean = rec_loss.mean()
+        # Perceptual
+        rec_loss = self.perceptual_loss(torch.from_numpy(inputs).float().to(self.device),
+                                        reconstructions.to(self.device), True)
         rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
         rec_mean = rec_loss.mean()
 
         gain = rec_sum - self.eps
         active = (self.mu * gain >= -self.lambda_).detach().type(torch.float)
 
-        nll_loss = active * (
-                self.lambda_ * gain +
-                self.mu / 2.0 * gain ** 2)
+        nll_loss = active * (self.lambda_.cuda() * gain + self.mu / 2.0 * gain ** 2)
 
-        kl_loss = posteriors.kl()
-        kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
+        kl_loss = 0.5 * torch.sum(torch.exp(logvar) + mu ** 2 - 1. - logvar)
+        #kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
 
         def train_op():
             new_lambda = self.lambda_ + self.mu * gain
             new_lambda = torch.clamp(new_lambda, min=0.0)
             self.lambda_.data.copy_(new_lambda)
 
-        loss = nll_loss + kl_loss
+        loss = nll_loss.cuda() + kl_loss.cuda()
         log = {"images": {"inputs": inputs, "reconstructions": reconstructions},
                "scalars": {"loss": loss,
                            "lambda_": self.lambda_,
@@ -48,4 +56,4 @@ class LossConstrained(nn.Module):
                            "kl_loss": kl_loss,
                            "nll_loss": nll_loss,
                            "rec_loss": rec_mean, }}
-        return loss, log, train_op
+        return loss.to(self.device), log, train_op

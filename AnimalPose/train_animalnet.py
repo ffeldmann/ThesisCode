@@ -6,10 +6,10 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.utils.loss_utils import MSELossInstances, VGGLossWithL1
+from AnimalPose.utils.loss_utils import VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
-from AnimalPose.utils import LossConstrained
+from AnimalPose.utils.LossConstrained import LossConstrained
 import numpy as np
 
 
@@ -27,31 +27,23 @@ class Iterator(TemplateIterator):
         self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"]["start_step"], \
                                                                                self.config["num_steps"], self.kl_weight, \
                                                                                self.config["variational"]["stop_weight"]
-        self.loss_constrained = LossConstrained()
+        self.loss_constrained = LossConstrained(self.config)
         # vgg loss
-        if self.config["losses"]["vgg"]:
-            self.vggL1 = VGGLossWithL1(gpu_ids=[0],
-                                       l1_alpha=self.config["losses"]["vgg_l1_alpha"],
-                                       vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
-        if self.config["losses"]["KL"]:
-            self.klloss = torch.nn.KLDivLoss(reduction="batchmean")
-        # initalize perceptual loss if possible
-        if self.config["losses"]["perceptual"]:
-            net = self.config["losses"]["perceptual_network"]
-            assert net in ["alex", "squeeze",
-                           "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
-            self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
-                self.device)
+        # if self.config["losses"]["vgg"]:
+        #     self.vggL1 = VGGLossWithL1(gpu_ids=[0],
+        #                                l1_alpha=self.config["losses"]["vgg_l1_alpha"],
+        #                                vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
+        # if self.config["losses"]["KL"]:
+        #     self.klloss = torch.nn.KLDivLoss(reduction="batchmean")
+        # # initalize perceptual loss if possible
+        # if self.config["losses"]["perceptual"]:
+        #     net = self.config["losses"]["perceptual_network"]
+        #     assert net in ["alex", "squeeze",
+        #                    "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
+        #     self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
+        #         self.device)
         if self.cuda:
             self.model.cuda()
-        # hooks
-        # if "pretrained_checkpoint" in self.config.keys():
-        #     self.hooks.append(
-        #         RestorePretrainedSDCHook(
-        #             pretrained_checkpoint=self.config["pretrained_checkpoint"],
-        #             model=self.model,
-        #         )
-        #     )
 
     def save(self, checkpoint_path):
         state = {
@@ -96,19 +88,19 @@ class Iterator(TemplateIterator):
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
-        if self.get_global_step() >= self.start_step and is_train:
-            if self.variational:
-                # self.logger.info(f"Global step: {self.get_global_step()}")
-                self.logger.info(f"Global step: {self.get_global_step()}")
-                prev = self.kl_weight
-                if self.config["variational"]["decay"]:
-                    self.kl_weight = self.kl_weight * 0.99
-                    self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
-                else:  # start_step, stop_step, start_weight, stop_weight
-                    relative_global_step = self.get_global_step() - self.start_step
-                    self.kl_weight = self.start_weight + ((self.stop_weight - self.start_weight) * (
-                            relative_global_step / (self.stop_step - self.start_step)))  # * 1.001
-                    self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
+        # if self.get_global_step() >= self.start_step and is_train:
+        #     if self.variational:
+        #         # self.logger.info(f"Global step: {self.get_global_step()}")
+        #         self.logger.info(f"Global step: {self.get_global_step()}")
+        #         prev = self.kl_weight
+        #         if self.config["variational"]["decay"]:
+        #             self.kl_weight = self.kl_weight * 0.99
+        #             self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
+        #         else:  # start_step, stop_step, start_weight, stop_weight
+        #             relative_global_step = self.get_global_step() - self.start_step
+        #             self.kl_weight = self.start_weight + ((self.stop_weight - self.start_weight) * (
+        #                     relative_global_step / (self.stop_step - self.start_step)))  # * 1.001
+        #             self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
 
         # (batch_size, width, height, channel)
         inputs0 = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
@@ -135,17 +127,20 @@ class Iterator(TemplateIterator):
 
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        if self.variational:
-            if self.encoder_2:
-                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
-            else:
-                losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
-        else:
-            losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions)
+        loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, self.get_global_step())
+        if is_train:
+            loss_train_op()
+        # if self.variational:
+        #     if self.encoder_2:
+        #         losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
+        #     else:
+        #         losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
+        # else:
+        #     losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions)
 
         def train_op():
             self.optimizer.zero_grad()
-            losses["total"].backward()
+            loss.backward()
             self.optimizer.step()
 
         def log_op():
@@ -157,9 +152,15 @@ class Iterator(TemplateIterator):
                     "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                 },
                 "scalars": {
-                    "loss": losses["total"],
+                    "loss": loss,
                 },
             }
+            logs["scalars"]["lambda_"] = log["scalars"]["lambda_"]
+            logs["scalars"]["gain"] = log["scalars"]["gain"]
+            logs["scalars"]["active"] = log["scalars"]["active"]
+            logs["scalars"]["kl_loss"] = log["scalars"]["kl_loss"]
+            logs["scalars"]["nll_loss"] = log["scalars"]["nll_loss"]
+            logs["scalars"]["rec_loss"] = log["scalars"]["rec_loss"]
 
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
@@ -169,16 +170,16 @@ class Iterator(TemplateIterator):
                         torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
                     logs["images"]["pose_reconstruction"] = adjust_support(
                         torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1")
-            if self.kl_weight:
-                logs["scalars"]["kl_weight"] = self.kl_weight
-            if self.config["losses"]["L2"]:
-                logs["scalars"]["L2_loss"] = losses["L2_loss"]
-            if self.config["losses"]["perceptual"]:
-                logs["scalars"]["perceptual"] = losses["perceptual"]
-            if self.config["losses"]["KL"] and self.variational:
-                logs["scalars"]["KL"] = losses["KL"]
-            if self.config["losses"]["vgg"]:
-                logs["scalars"]["vgg"] = losses["vgg"]
+            # if self.kl_weight:
+            #     logs["scalars"]["kl_weight"] = self.kl_weight
+            # if self.config["losses"]["L2"]:
+            #     logs["scalars"]["L2_loss"] = losses["L2_loss"]
+            # if self.config["losses"]["perceptual"]:
+            #     logs["scalars"]["perceptual"] = losses["perceptual"]
+            # if self.config["losses"]["KL"] and self.variational:
+            #     logs["scalars"]["KL"] = losses["KL"]
+            # if self.config["losses"]["vgg"]:
+            #     logs["scalars"]["vgg"] = losses["vgg"]
             return logs
 
         def eval_op():
