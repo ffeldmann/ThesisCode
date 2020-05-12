@@ -217,14 +217,28 @@ class ResPoseNet(nn.Module):
         if config["load_self_pretrained_encoder"]["active"]:
             path = config["load_self_pretrained_encoder"]["path"]
             self.logger.info(f"Init encoder from pretraind path: {path}.")
-            state_dict = torch.load(path, map_location="cuda")["model"]
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                if k.startswith("backbone."):
-                    name = k.replace("backbone.", "")
-                    new_state_dict[name] = v
-            new_state_dict.pop("layer4.fc.1.weight", None)
-            new_state_dict.pop("layer4.fc.1.bias", None)
+            try:
+                state_dict = torch.load(path, map_location="cuda")["model"]
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith("backbone."):
+                        name = k.replace("backbone.", "")
+                        new_state_dict[name] = v
+                new_state_dict.pop("layer4.fc.1.weight", None)
+                new_state_dict.pop("layer4.fc.1.bias", None)
+            except KeyError:
+                state_dict = torch.load(path, map_location="cuda")
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith("content_encoder."):
+                        name = k.replace("content_encoder.", "")
+                        new_state_dict[name] = v
+                new_state_dict.pop("layer4.fc.1.weight", None)
+                new_state_dict.pop("layer4.fc.1.bias", None)
+                new_state_dict.pop("fc1.weight", None)
+                new_state_dict.pop("fc1.bias", None)
+
+
             self.backbone.load_state_dict(new_state_dict, strict=True)
 
         if config["load_self_pretrained_decoder"]["active"]:
