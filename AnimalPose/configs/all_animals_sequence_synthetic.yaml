@@ -3,3 +3,4 @@ validation_dataset: AnimalPose.data.AllAnimals_Sequence_Validation
 animals: ["horse"] # ["horse", "domestic_sheep"]#, "horse", "hellenic_hound", "tiger"]
 synthetic: True # Placeholder, just important for the dataloader
 sequence_length: 100
+image_type: "white" # "mask" "white" "normal"

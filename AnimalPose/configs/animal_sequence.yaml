@@ -1,4 +1,4 @@
-n_classes: 19
+n_classes: 18
 n_channels: 3 # rgb or grayscale
 bilinear: true
 resize_to: 128

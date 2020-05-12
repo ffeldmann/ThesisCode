@@ -12,7 +12,8 @@ adjust_learning_rate: False
 # Pretraining!
 load_self_pretrained_encoder:
   active: True
-  path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
+  path: "load_weights/amortized.pth"
+  #path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
 load_self_pretrained_decoder:
   active: False
   path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
