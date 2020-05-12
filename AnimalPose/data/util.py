@@ -8,6 +8,38 @@ from AnimalPose.utils.image_utils import heatmaps_to_coords
 from AnimalPose.utils.tensor_utils import torch2numpy
 
 
+def bboxes_from_kps(keypoints_raw):
+    # from jhaux flowtrack_j
+    '''Findes a bounding box of all sets of keypoints in ``keypoints``.
+
+    Arguments:
+        keypoints (np.array): Nd-array, where the last 2 dimensions correspond
+            to the ``N`` keypoints of one instance. Shape: ``[..., N, 2]``
+
+    Returns:
+        np.array: Boxes around all instances. Shape: ``[..., 4]``.
+    '''
+    # fix treating of 0,0 point
+    mask = np.not_equal(keypoints_raw[:, 0], 0) * np.not_equal(keypoints_raw[:, 1], 0)
+    keypoints = keypoints_raw[mask]
+    if not len(keypoints):
+        return np.array([0, 0, 0, 0])
+    # keypoints= keypoints_raw
+
+    x_mins = np.amin(keypoints[..., 0], axis=-1, keepdims=True)  # [..., xmin]
+    y_mins = np.amin(keypoints[..., 1], axis=-1, keepdims=True)  # [..., ymin]
+    kp_mins = np.concatenate([x_mins, y_mins], -1)  # [..., xmin ymin]
+
+    x_maxs = np.amax(keypoints[..., 0], axis=-1, keepdims=True)  # [..., xmax]
+    y_maxs = np.amax(keypoints[..., 1], axis=-1, keepdims=True)  # [..., ymax]
+    kp_maxs = np.concatenate([x_maxs, y_maxs], -1)  # [..., xmax ymax]
+
+    widths_and_heights = kp_maxs - kp_mins  # [..., width height]
+
+    # [..., xmin ymin width height]
+    return np.concatenate([kp_mins, widths_and_heights], axis=-1)
+
+
 class Rescale(object):
     """Rescale the image and keypoints in a sample to a given size.
 
@@ -56,17 +88,20 @@ def crop(image, keypoints, bbox):
     """
 
     # bbox = np.floor(bbox).astype(int)
+    prev_width, prev_height, _ = image.shape
     img = image[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2], :]
+
     zero_mask_x = np.where(keypoints[:, 0] <= 0)
     zero_mask_y = np.where(keypoints[:, 1] <= 0)
     # First subtract the bounding box x and y from the coordinates of the keypoints
     keypoints = np.subtract(np.array(keypoints), np.array([bbox[0], bbox[1]]))
     # Set the keypoints which were zero back to zero
     # keypoints[keypoints[:, 1] <= 0] = np.array([0, 0])
+
     keypoints[zero_mask_x] = np.array([0, 0])
     keypoints[zero_mask_y] = np.array([0, 0])
 
-    return img, keypoints
+    return img, keypoints.astype(np.float32)
 
 
 def gaussian_k(x0, y0, sigma, height, width):
@@ -116,8 +151,6 @@ def make_stickanimal(image, predictions, thresh=0):
         coords, _ = heatmaps_to_coords(torch2numpy(predictions), thresh=thresh)
     else:
         coords = predictions
-
-    # TODO: why do we have no keypoints anymore?!
 
     joints = [
         # Head
