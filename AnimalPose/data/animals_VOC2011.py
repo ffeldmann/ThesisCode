@@ -6,6 +6,10 @@ from edflow.data.believers.meta import MetaDataset
 from edflow.data.dataset_mixin import DatasetMixin
 import sklearn.model_selection
 from AnimalPose.data.util import make_heatmaps, crop, make_stickanimal
+from AnimalPose.utils.image_utils import heatmaps_to_image
+
+from AnimalPose.data.util import bboxes_from_kps
+
 from edflow.data.util import adjust_support
 from edflow import get_logger
 
@@ -75,21 +79,12 @@ class AnimalVOC2011_Abstract(DatasetMixin):
                 iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
                 iaa.Fliplr(self.aug_factor),
                 iaa.Flipud(self.aug_factor),
-                # iaa.Sometimes(self.aug_factor,
-                #              iaa.Affine(
-                #                  rotate=10,
-                #                  scale=(0.5, 0.7)
-                #              )
-                #              ),
                 iaa.Sometimes(self.aug_factor, iaa.GaussianBlur(sigma=(0, 3.0))),
                 iaa.LinearContrast((0.75, 1.5)),
                 # Convert each image to grayscale and then overlay the
                 # result with the original with random alpha. I.e. remove
                 # colors with varying strengths.
                 iaa.Grayscale(alpha=(0.0, 1.0)),
-                # iaa.Sometimes(self.aug_factor, iaa.Rain(speed=(0.1, 0.3))),
-                # iaa.Sometimes(self.aug_factor, iaa.Clouds()),
-                # iaa.Sometimes(self.aug_factor, iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30))),
             ], random_order=True)
 
         self.joints = [
@@ -143,15 +138,47 @@ class AnimalVOC2011_Abstract(DatasetMixin):
         """
         example = super().get_example(idx)
         output = {}
-        image, keypoints, bboxes = example["frames"](), self.labels["kps"][idx], self.labels["bboxes"][idx]
+        if self.config.get("image_type", "") == "mask":
+            image = example["masked_frames"]()
+        elif self.config.get("image_type", "") == "white":
+            image = example["whitened_frames"]()
+        else:
+            image = example["frames"]()
+        keypoints = self.labels["kps"][idx]
+        if "synthetic" in self.data.data.config:
+            # add a keypoint
+            keypoints = np.append(keypoints, [[0, 0], [0, 0]], axis=0)
+        try:
+            bboxes = self.labels["bboxes"][idx]
+            bbox_available = True
+        except:
+            # self.logger.warning("No bboxes in this dataset!")
+            bbox_available = False
+            # estimate bbox from keypoints
+            bboxes = bboxes_from_kps(keypoints)
+            # check if bbox is out of the image and clip
+            # [x, y, width, height]
+            width, height, _ = image.shape
+            bboxes[0] = bboxes[0].clip(0, width)
+            bboxes[1] = bboxes[1].clip(0, height)
+            bboxes[2] = bboxes[2].clip(0, width)
+            bboxes[3] = bboxes[3].clip(0, height)
+            bboxes = bboxes.astype(np.float32)
+            bbox_available = True
+
+        # image, keypoints, bboxes = example["frames"](), self.labels["kps"][idx], self.labels["bboxes"][idx]
         # store which keypoints are not present in the dataset
         zero_mask_x = np.where(keypoints[:, 0] <= 0)
         zero_mask_y = np.where(keypoints[:, 1] <= 0)
         # need uint 8 for augmentation methods
         image = adjust_support(image, "0->255")
-        if "crop" in self.data.data.config.keys():
+        if "crop" in self.config.keys():
             if self.data.data.config["crop"]:
-                image, keypoints = crop(image, keypoints, bboxes)
+                if not bbox_available:
+                    pass
+                    # self.logger.warning("No resizing possible, no bounding box!")
+                else:
+                    image, keypoints = crop(image, keypoints, bboxes)
         if self.augmentation:
             # randomly perform some augmentations on the image, keypoints and bboxes
             image, keypoints = self.seq(image=image, keypoints=keypoints.reshape(1, -1, 2))
@@ -177,6 +204,8 @@ class AnimalVOC2011_Abstract(DatasetMixin):
 
         output["kps"] = keypoints
         output["targets"] = make_heatmaps(output["inp0"], keypoints, sigma=self.sigma)
+        output["targets_vis"] = heatmaps_to_image(
+            np.expand_dims(make_heatmaps(output["inp0"], keypoints, sigma=self.sigma), 0)).squeeze()
         output["animal_class"] = np.array(animal_class[self.data.data.animal])
         output["stickanmial"] = make_stickanimal(np.expand_dims(output["inp0"], 0), np.expand_dims(keypoints, 0))
         # Workaround for the encoder decoder to just see how vae is doing
@@ -201,10 +230,13 @@ class AllAnimalsVOC2011_Train(AnimalVOC2011_Abstract):
     def __init__(self, config):
         # self.animals  = [AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'})) for animal in config["animals"]]
         for animal in config["animals"]:
+            dataroot = "VOC2011"
+            if "synthetic" in config:
+                dataroot = "synthetic_animals"
             try:
-                self.data += AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+                self.data += AnimalVOC2011_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
             except:
-                self.data = AnimalVOC2011_Train(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+                self.data = AnimalVOC2011_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
 
     def get_example(self, idx):
         return self.data.get_example(idx)
@@ -213,10 +245,13 @@ class AllAnimalsVOC2011_Train(AnimalVOC2011_Abstract):
 class AllAnimalsVOC2011_Validation(AnimalVOC2011_Abstract):
     def __init__(self, config):
         for animal in config["animals"]:
+            dataroot = "VOC2011"
+            if "synthetic" in config:
+                dataroot = "synthetic_animals"
             try:
-                self.data += AnimalVOC2011_Validation(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+                self.data += AnimalVOC2011_Validation(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
             except:
-                self.data = AnimalVOC2011_Validation(dict(config, **{'dataroot': f'VOC2011/{animal}s_meta'}))
+                self.data = AnimalVOC2011_Validation(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
 
     def get_example(self, idx):
         return self.data.get_example(idx)

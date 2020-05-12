@@ -59,7 +59,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
         self.sequence_length = 2  # if config.get("sequence_length", False) == False else config["sequence_length"]
-        #self.sc = Animal_Sequence(config)
+        # self.sc = Animal_Sequence(config)
         self.sc = SequenceDataset(Animal_Sequence(config), self.sequence_length, step=config["sequence_step_size"])
         # works if dataroot like "VOC2011/cats_meta"
         # TODO PROBABLY NOT CORRECT HERE
@@ -161,7 +161,13 @@ class Animal_Sequence_Abstract(DatasetMixin):
         output = dict()
         sample_idxs = np.random.choice(np.arange(0, self.sequence_length), 2, replace=False)
         for i, ex_idx in enumerate(sample_idxs):
-            image, keypoints, = example["frames"][ex_idx](), self.labels["kps"][idx][ex_idx],
+            if self.config.get("image_type", "") == "mask":
+                image = example["masked_frames"][ex_idx]()
+            elif self.config.get("image_type", "") == "white":
+                image = example["whitened_frames"][ex_idx]()
+            else:
+                image = example["frames"][ex_idx]()
+            keypoints = self.labels["kps"][idx][ex_idx]
             try:
                 bboxes = self.labels["bboxes"][idx][ex_idx]
                 bbox_available = True
