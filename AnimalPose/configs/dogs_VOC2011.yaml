@@ -1,3 +1,0 @@
-dataset: AnimalPose.data.AnimalVOC2011_Train
-validation_dataset: AnimalPose.data.AnimalVOC2011_Validation
-dataroot: 'VOC2011/dogs_meta'
