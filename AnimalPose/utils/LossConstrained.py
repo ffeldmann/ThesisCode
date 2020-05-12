@@ -15,19 +15,19 @@ class LossConstrained(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.lambda_init = retrieve(config, "Loss/lambda_init", default=1.0)
+        self.lambda_init = retrieve(config, "Loss/lambda_init", default=1000000.0)
         self.register_buffer("lambda_", torch.ones(size=()) * self.lambda_init)
         self.mu = retrieve(config, "Loss/mu", default=0.05)
-        self.eps = retrieve(config, "Loss/eps", default=0.1)#30.72)  # mean of 0.01
+        self.eps = retrieve(config, "Loss/eps", default=0.1)  # 30.72)  # mean of 0.01
         net = self.config["losses"]["perceptual_network"]
         self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=True, spatial=False).to("cuda")
         self.device = "cuda"
 
     def forward(self, inputs, reconstructions, mu, logvar, global_step):
         # L2 Loss
-        #rec_loss = (inputs - reconstructions) ** 2
-        #rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
-        #rec_mean = rec_loss.mean()
+        # rec_loss = (inputs - reconstructions) ** 2
+        # rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
+        # rec_mean = rec_loss.mean()
         # Perceptual
         rec_loss = self.perceptual_loss(torch.from_numpy(inputs).float().to(self.device),
                                         reconstructions.to(self.device), True)
@@ -40,7 +40,8 @@ class LossConstrained(nn.Module):
         nll_loss = active * (self.lambda_.cuda() * gain + self.mu / 2.0 * gain ** 2)
 
         kl_loss = 0.5 * torch.sum(torch.exp(logvar) + mu ** 2 - 1. - logvar)
-        #kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
+
+        # kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
 
         def train_op():
             new_lambda = self.lambda_ + self.mu * gain
