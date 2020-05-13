@@ -124,7 +124,7 @@ class Iterator(TemplateIterator):
                 predictions, mu, logvar = model(inputs0)
             else:
                 predictions = model(inputs0)
-
+        #predictions = torch.clamp(predictions, min=0.0, max=1.0)
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
         loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, self.get_global_step())
@@ -161,6 +161,9 @@ class Iterator(TemplateIterator):
             logs["scalars"]["kl_loss"] = log["scalars"]["kl_loss"]
             logs["scalars"]["nll_loss"] = log["scalars"]["nll_loss"]
             logs["scalars"]["rec_loss"] = log["scalars"]["rec_loss"]
+            logs["scalars"]["mu"] = log["scalars"]["mu"]
+            logs["scalars"]["eps"] = log["scalars"]["eps"]
+
 
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
