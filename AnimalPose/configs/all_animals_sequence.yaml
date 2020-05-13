@@ -1,3 +1,5 @@
 dataset: AnimalPose.data.AllAnimals_Sequence_Train
 validation_dataset: AnimalPose.data.AllAnimals_Sequence_Validation
-animals: ["cat", "dog", "sheep", "horse"]#, "tiger"] #TODO: TIGDOG horses are not inside!
+animals: ["sheep", "cat", "dog", "sheep", "horse"]#, "tiger"] #TODO: TIGDOG horses are not inside!
+image_type: "none" # "mask" "white" "none"
+cropped: True # cropped_meta dataset uncomment for pervious dataset

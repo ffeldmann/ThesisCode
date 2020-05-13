@@ -38,6 +38,11 @@ losses:
   vgg_l1_alpha: 1.0
   vgg_alpha: 1.0
 
+LossConstrained:
+  eps: 0.1 # eps ist der maximal zulässige reconstruction loss
+  mu: 0.1 # mu ist hyperparameter wie stark der loss angepasst wird
+  lambda_init: 10000
+
 # logging
 integrations:
   git:
