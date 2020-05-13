@@ -123,24 +123,24 @@ class Animal_Sequence_Abstract(DatasetMixin):
         else:
             self.data = self.sc
 
-    def get_appearance_image(self, pid, fids):
-        """
-
-        Args:
-            pid: video id
-            fids: frame ids
-
-        Returns:
-
-        """
-        # Get frame id mask where
-        fid_mask = np.invert(np.isin(self.data.labels["fid"], fids))
-        try:
-            valid_indices = np.argwhere((pid == self.data.labels["pid"]) & fid_mask)[0]
-        except IndexError:
-            valid_indices = np.argwhere((pid == self.data.labels["pid"]))[0]
-        random_idx = np.random.choice(valid_indices)
-        return self.data[random_idx]
+    # def get_appearance_image(self, pid, fids):
+    #     """
+    #
+    #     Args:
+    #         pid: video id
+    #         fids: frame ids
+    #
+    #     Returns:
+    #
+    #     """
+    #     # Get frame id mask where
+    #     fid_mask = np.invert(np.isin(self.data.labels["fid"], fids))
+    #     try:
+    #         valid_indices = np.argwhere((pid == self.data.labels["pid"]) & fid_mask)[0]
+    #     except IndexError:
+    #         valid_indices = np.argwhere((pid == self.data.labels["pid"]))[0]
+    #     random_idx = np.random.choice(valid_indices)
+    #     return self.data[random_idx]
 
     def get_parts(self):
         return parts
@@ -167,7 +167,12 @@ class Animal_Sequence_Abstract(DatasetMixin):
                 image = example["whitened_frames"][ex_idx]()
             else:
                 image = example["frames"][ex_idx]()
-            keypoints = self.labels["kps"][idx][ex_idx]
+            try:
+                keypoints = self.labels["kps"][idx][ex_idx]
+            except:
+                keypoints = np.array(
+                    [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0],
+                     [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]])
             try:
                 bboxes = self.labels["bboxes"][idx][ex_idx]
                 bbox_available = True
@@ -235,12 +240,15 @@ class AllAnimals_Sequence_Train(Animal_Sequence_Abstract):
     def __init__(self, config):
         for animal in config["animals"]:
             dataroot = "animals"
+            meta_path = "s_meta"
             if "synthetic" in config:
                 dataroot = "synthetic_animals"
+            if "cropped" in config:
+                meta_path = "s_cropped_meta"
             try:
-                self.data += Animal_Sequence_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
+                self.data += Animal_Sequence_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}{meta_path}'}))
             except:
-                self.data = Animal_Sequence_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
+                self.data = Animal_Sequence_Train(dict(config, **{'dataroot': f'{dataroot}/{animal}{meta_path}'}))
 
     def get_example(self, idx):
         return self.data.get_example(idx)
@@ -252,10 +260,14 @@ class AllAnimals_Sequence_Validation(Animal_Sequence_Abstract):
             dataroot = "animals"
             if "synthetic" in config:
                 dataroot = "synthetic_animals"
+            if "cropped" in config:
+                meta_path = "s_cropped_meta"
             try:
-                self.data += Animal_Sequence_Validation(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
+                self.data += Animal_Sequence_Validation(
+                    dict(config, **{'dataroot': f'{dataroot}/{animal}{meta_path}'}))
             except:
-                self.data = Animal_Sequence_Validation(dict(config, **{'dataroot': f'{dataroot}/{animal}s_meta'}))
+                self.data = Animal_Sequence_Validation(
+                    dict(config, **{'dataroot': f'{dataroot}/{animal}{meta_path}'}))
 
             # import pdb; pdb.set_trace()
 
