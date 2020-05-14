@@ -18,6 +18,9 @@ animal_class = {"cats": 0,
                 "sheeps": 2,
                 "cows": 3,
                 "horses": 4,
+                "tigers": 5,
+                "domestic": 2,  # also sheeps
+                "hellenic": 1,  # also a dog
                 }
 
 parts = {

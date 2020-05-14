@@ -258,6 +258,7 @@ class AllAnimals_Sequence_Validation(Animal_Sequence_Abstract):
     def __init__(self, config):
         for animal in config["animals"]:
             dataroot = "animals"
+            meta_path = "s_meta"
             if "synthetic" in config:
                 dataroot = "synthetic_animals"
             if "cropped" in config:

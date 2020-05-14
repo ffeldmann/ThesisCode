@@ -1,14 +1,14 @@
 dataset: AnimalPose.data.AllAnimalsVOC2011_Train
 validation_dataset: AnimalPose.data.AllAnimalsVOC2011_Validation
-animals: ["horse"] # ["horse", "domestic_sheep"]#, "horse", "hellenic_hound", "tiger"]
+animals: ["horse", "cat", "tiger", "hellenic_hound", "domestic_sheep"]
 synthetic: True # Placeholder, just important for the dataloader
 image_type: "white" # "mask" "white" "none"
-n_classes: 18
+n_classes: 20
 n_channels: 3 # rgb or grayscale
 bilinear: true
 resize_to: 128
 as_grey: False
-sigma: 3 # Good way sigma = size/64 for heatmaps
+sigma: 2 # Good way sigma = size/64 for heatmaps
 crop: False
 augmentation: False
 train_size: 0.8
