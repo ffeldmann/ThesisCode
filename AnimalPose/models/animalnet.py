@@ -60,13 +60,14 @@ class AnimalPosenet(ResPoseNet):
                 Flatten(),
                 nn.Linear(2048 * 4 * 4, config["encoder_latent_dim"])
             )
-            )
+                                            )
 
         if config["encoder_2"]:
             self.backbone2 = self.backbone
         if config["resnet_type"] <= 38:
             # for resnet type 18, 38
-            self.fc = nn.Linear(config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 512 * 4 * 4)
+            self.fc = nn.Linear(
+                config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 512 * 4 * 4)
         else:
             # For resnet type 50, 101, 152
             self.fc = nn.Linear(
