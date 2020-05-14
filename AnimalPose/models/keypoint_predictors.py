@@ -181,11 +181,10 @@ class DeconvHead(nn.Module):
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.ConvTranspose2d):
                 nn.init.normal_(m.weight, mean=0, std=0.001)
-        self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         for idx, layer in enumerate(self.features):
             x = layer(x)
-        return self.sigmoid(x)
+        return x
 
 
 class ResPoseNet(nn.Module):
@@ -237,8 +236,6 @@ class ResPoseNet(nn.Module):
                 new_state_dict.pop("layer4.fc.1.bias", None)
                 new_state_dict.pop("fc1.weight", None)
                 new_state_dict.pop("fc1.bias", None)
-
-
             self.backbone.load_state_dict(new_state_dict, strict=True)
 
         if config["load_self_pretrained_decoder"]["active"]:
@@ -254,9 +251,7 @@ class ResPoseNet(nn.Module):
             new_state_dict["features.20.bias"] = self.head.features[20].bias
             self.head.load_state_dict(new_state_dict, strict=True)
 
-        self.sigmoid = nn.Sigmoid()
-
     def forward(self, x):
         x = self.backbone(x)
         x = self.head(x)
-        return self.sigmoid(x)
+        return x
