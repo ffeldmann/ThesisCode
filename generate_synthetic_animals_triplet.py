@@ -300,10 +300,24 @@ def retrieve(animal, num_videos, num_images, use_random_texture):
     output_dir = output_path
     if not os.path.isdir(output_dir): os.makedirs(output_dir)
 
-    masked_frames = []
-    whitened_frames = []
-    frame_names = []
-    extracted_kpts = []
+    # masked_frames = []
+    # whitened_frames = []
+    # frame_names = []
+    # extracted_kpts = []
+
+    p0a0_frame_names = []
+    p0a1_frame_names = []
+    p1a1_frame_names = []
+    p0a0_extracted_kpts = []
+    p0a1_extracted_kpts = []
+    p1a1_extracted_kpts = []
+    p0a0_list_whitened = []
+    p0a1_list_whitened = []
+    p1a1_list_whitened = []
+    p0a0_list_masked = []
+    p0a1_list_masked = []
+    p1a1_list_masked = []
+
     fid = []  # fram id for sequence dataset
     vids = []  # list of video ids
     vid = -1  # video id
@@ -321,42 +335,47 @@ def retrieve(animal, num_videos, num_images, use_random_texture):
         for i, param in enumerate(tqdm(render_params)):
             mesh, anim, ratio, dist, az, el = param
             filename = make_filename(img_idx, mesh, anim, ratio, dist, az, el)
-            p0a0, p0a1, p1a1 = False, False, False
+            print(filename)
 
+            p0a0, p0a1, p1a1 = False, False, False
             p0a0_tried = False
+            goto_p1a1 = False
 
             def check_triplet():
                 return p0a0 and p0a1 and p1a1
 
+            # Update the scene
+            env.set_random_light()
             while not check_triplet():
                 for triplet in ["p0a0", "p0a1", "p1a1"]:
                     if triplet == "p0a0":
+                        print(triplet)
                         if p0a0_tried:
+                            goto_p1a1 = True
                             continue
                         p0a0_tried = True
                     elif triplet == "p0a1":
-
-                        if p0a0 == False:
+                        print(triplet)
+                        if (p0a0_tried and not p0a0):
                             # p0a0 was false so p0a1 will be false as well
                             # we set all of them true to break the while loop
                             p0a0, p0a1, p1a1 = True, True, True
                             print("Breaking the loop.")
                             break
-                        if p0a0_tried:
+                        if goto_p1a1:
                             continue
                         # update the appearance but leave the pose as is
                         random_texture = video
                         while video == random_texture:
-                            random_texture = random.randint(0, num_videos + 1)
+                            random_texture = random.randint(0, len(beautiful_textures_path_list))
                             animal_texture = beautiful_textures_path_list[random_texture]
-                            animal.set_texture(animal_texture)
+                        animal.set_texture(animal_texture)
                     elif triplet == "p1a1":
                         # update the pose but leave the appearance as is
+                        print("Setting new pose.")
                         param = random.choice(render_params)
                         mesh, anim, ratio, dist, az, el = param
 
-                    # Update the scene
-                    env.set_random_light()
                     env.set_floor(floor_texture)
                     env.set_sky(sky_texture)
 
@@ -417,8 +436,9 @@ def retrieve(animal, num_videos, num_images, use_random_texture):
                                     1580,
                                     466,
                                     631]
-
+                    print(triplet, sum(kpts[kp_18_id, 2]))
                     if sum(kpts[kp_18_id, 2]) >= 4:
+
                         arr = kpts[kp_18_id]
                         # set non visible points to zero
                         arr[arr[:, 2] == 0] = [0, 0, 0]
@@ -437,22 +457,35 @@ def retrieve(animal, num_videos, num_images, use_random_texture):
                         imageio.imwrite(sequence_dir_filename_mask, seg_mask)
                         imageio.imwrite(sequence_dir_filename_mask_whitened, whitened_img)
                         imageio.imwrite(sequence_dir_filename, img)
-                        masked_frames.append(os.path.join(sequence_output_dir, filename_mask))
-                        whitened_frames.append(os.path.join(sequence_output_dir, filename_mask_whitened))
-                        frame_names.append(sequence_dir_filename)
-                        extracted_kpts.append(arr)
-                        fid.append(img_idx)
-                        vids.append(vid)
+                        # masked_frames.append(os.path.join(sequence_output_dir, filename_mask))
+                        # whitened_frames.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                        # frame_names.append(sequence_dir_filename)
+                        # extracted_kpts.append(arr)
+                        # fid.append(img_idx)
+                        # vids.append(vid)
+
+                        if triplet == "p0a0":  # ["p0a0", "p0a1", "p1a1"]
+                            p0a0 = True
+                            p0a0_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                            p0a0_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                            p0a0_frame_names.append(sequence_dir_filename)
+                            p0a0_extracted_kpts.append(arr)
+                        if triplet == "p0a1":
+                            p0a1 = True
+                            p0a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                            p0a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                            p0a1_frame_names.append(sequence_dir_filename)
+                            p0a1_extracted_kpts.append(arr)
+                        if triplet == "p1a1":
+                            p1a1 = True
+                            p1a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                            p1a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                            p1a1_frame_names.append(sequence_dir_filename)
+                            p1a1_extracted_kpts.append(arr)
 
                         img_idx += 1
                         if img_idx > num_images - 1:
                             break
-                        if triplet == "p0a0":  # ["p0a0", "p0a1", "p1a1"]
-                            p0a0 = True
-                        elif triplet == "p0a1":
-                            p0a1 = True
-                        elif triplet == "p1a1":
-                            p1a1 = True
 
     assert len(frame_names) == len(extracted_kpts) == len(fid) == len(vids)
     return frame_names, masked_frames, whitened_frames, np.array(extracted_kpts), np.array(fid), np.array(vids)
