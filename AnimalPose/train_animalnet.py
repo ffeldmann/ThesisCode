@@ -28,6 +28,7 @@ class Iterator(TemplateIterator):
                                                                                self.config["num_steps"], self.kl_weight, \
                                                                                self.config["variational"]["stop_weight"]
         self.loss_constrained = LossConstrained(self.config)
+        self.sigmoid = torch.nn.Sigmoid()
         # vgg loss
         # if self.config["losses"]["vgg"]:
         #     self.vggL1 = VGGLossWithL1(gpu_ids=[0],
@@ -124,7 +125,7 @@ class Iterator(TemplateIterator):
                 predictions, mu, logvar = model(inputs0)
             else:
                 predictions = model(inputs0)
-        #predictions = torch.clamp(predictions, min=0.0, max=1.0)
+        predictions = self.sigmoid(predictions) # in order to make the output in range between 0 and 1
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
         loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, self.get_global_step())
