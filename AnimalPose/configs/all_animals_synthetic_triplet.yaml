@@ -1,0 +1,14 @@
+dataset: AnimalPose.data.AllAnimalTriplet_Train
+validation_dataset: AnimalPose.data.AllAnimalTriplet_Validation
+animals: ["horse"]#, "cat", "tiger", "hellenic_hound", "domestic_sheep"]
+synthetic: True # Placeholder, just important for the dataloader
+image_type: "white" # "mask" "white" "none"
+n_classes: 20
+n_channels: 3 # rgb or grayscale
+bilinear: true
+resize_to: 128
+augmentation: False
+train_size: 0.8
+random_state: 42
+pck_alpha: 0.5
+pck_multi: False
