@@ -70,12 +70,11 @@ class Iterator(TemplateIterator):
         # normalization done inplace
         # for inp in inputs: self.normalize(inp)
         # animal labels
-        labels = torch.from_numpy(kwargs["animal_class"]).to("cuda")
+        labels = torch.from_numpy(kwargs["vid_id_appearance0"]).to("cuda")
         # compute model
         outputs = model(inputs)
         _, preds = torch.max(outputs, 1)
         # compute loss
-        # Target heatmaps, predicted heatmaps, gt_coords
         losses = self.criterion(labels, outputs)
 
         # Compute accuracy for batch
@@ -103,7 +102,7 @@ class Iterator(TemplateIterator):
                     "accuracy": accuracy.cpu().numpy(),
                 },
                 "figures": {
-                    "predictions": plot_pred_figure(inputs, preds.cpu().detach().numpy())
+                    "predictions": plot_pred_figure(inputs, preds.cpu().detach().numpy(), labels)
                 }
 
             }

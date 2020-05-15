@@ -4,7 +4,7 @@ from edflow.data.util import adjust_support
 from AnimalPose.utils.tensor_utils import sure_to_torch, sure_to_numpy
 
 
-def plot_pred_figure(images, predictions):
+def plot_pred_figure(images, predictions, labels=None):
     """
     Remember to clip output numpy array to [0, 255] range and cast it to uint8.
     Otherwise matplot.pyplot.imshow would show weird results.
@@ -19,8 +19,11 @@ def plot_pred_figure(images, predictions):
     for idx in range(8):
         fig.add_subplot(4, 2, idx + 1)
         fig.suptitle('Input, Prediction')
-        plt.title(f"{idx_to_animal[predictions[idx]]}")
-        plt.imshow(adjust_support(images[idx].cpu().numpy().transpose(1, 2, 0), "0->1"))
+        if labels != None:
+            plt.title(f"GT:{labels[idx]}, Pred: {predictions[idx]}")
+        else:
+            plt.title(f"{idx_to_animal[predictions[idx]]}")
+        plt.imshow(adjust_support(images[idx].cpu().numpy().transpose(1, 2, 0), "0->1", "0->1"))
         plt.tight_layout()
     return fig
 
@@ -39,7 +42,7 @@ def plot_input_target_keypoints(inputs: np.ndarray, targets, gt_coords, coords):
     """
     fig = plt.figure(figsize=(10, 10))
     # heatmaps_to_coords needs [batch_size, num_joints, height, width]
-    #coords, _ = heatmaps_to_coords(targets)
+    # coords, _ = heatmaps_to_coords(targets)
     coords = sure_to_numpy(coords.clone())
     for idx in range(8):
         fig.add_subplot(4, 2, idx + 1)
