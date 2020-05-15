@@ -234,7 +234,7 @@ def transform_kpts(cam_loc, cam_rot, kpts_3d, depth_img):
     return kpts, kpts_z
 
 
-def retrieve(animal, num_videos, num_images, use_random_texture):
+def retrieve(animal, num_images, use_random_texture):
     udb.connect('localhost', 9900)
 
     # reset the program
@@ -318,177 +318,170 @@ def retrieve(animal, num_videos, num_images, use_random_texture):
     p0a1_list_masked = []
     p1a1_list_masked = []
 
-    fid = []  # fram id for sequence dataset
-    vids = []  # list of video ids
-    vid = -1  # video id
-    for video in range(num_videos):
-        vid += 1
-        img_idx = 0
-        sky_texture = "/export/home/ffeldman/Masterarbeit/data/white.jpg"  # random.choice(bg_path_list)
-        floor_texture = "/export/home/ffeldman/Masterarbeit/data/white.jpg"  # random.choice(bg_path_list)
-        animal_texture = beautiful_textures_path_list[video]  # random.choice(texture_path_list)
-        if use_random_texture:
-            # Randomly sets the texture for a sequence of images
-            animal.set_texture(animal_texture)
-        # process_params = random.choices(render_params, k=num_images)
-        random.shuffle(render_params)
-        for i, param in enumerate(tqdm(render_params)):
-            mesh, anim, ratio, dist, az, el = param
-            filename = make_filename(img_idx, mesh, anim, ratio, dist, az, el)
-            print(filename)
+    img_idx = 0
+    sky_texture = "/export/home/ffeldman/Masterarbeit/data/white.jpg"  # random.choice(bg_path_list)
+    floor_texture = "/export/home/ffeldman/Masterarbeit/data/white.jpg"  # random.choice(bg_path_list)
+    # random.choice(texture_path_list)
+    # process_params = random.choices(render_params, k=num_images)
+    random.shuffle(render_params)
+    for i, param in enumerate(tqdm(render_params)):
+        random_animal_texture = random.randint(0, len(beautiful_textures_path_list) - 1)
+        animal_texture = beautiful_textures_path_list[random_animal_texture]
+        mesh, anim, ratio, dist, az, el = param
+        filename = make_filename(img_idx, mesh, anim, ratio, dist, az, el)
 
-            p0a0, p0a1, p1a1 = False, False, False
-            p0a0_tried = False
-            goto_p1a1 = False
+        p0a0, p0a1, p1a1 = False, False, False
+        p0a0_tried = False
+        goto_p1a1 = False
 
-            def check_triplet():
-                return p0a0 and p0a1 and p1a1
+        def check_triplet():
+            return p0a0 and p0a1 and p1a1
 
-            # Update the scene
-            env.set_random_light()
-            while not check_triplet():
-                for triplet in ["p0a0", "p0a1", "p1a1"]:
+        # Update the scene
+        env.set_random_light()
+        break_while = False
+        print("Here before while.")
+        while not check_triplet():
+            print("Image idx:", img_idx)
+            for triplet in ["p0a0", "p0a1", "p1a1"]:
+                print(triplet, p0a0, p0a1, p1a1)
+                if triplet == "p0a0":
+                    if p0a0_tried and p0a0:
+                        goto_p1a1 = True
+                        continue
+                    p0a0_tried = True
+                elif triplet == "p0a1":
+                    if (p0a0_tried and not p0a0):
+                        # p0a0 was false so p0a1 will be false as well
+                        # we set all of them true to break the while loop
+                        p0a0, p0a1, p1a1 = True, True, True
+                        break_while = True
+                        print("Breaking the loop.")
+                        break
+                    if goto_p1a1:
+                        continue
+                    # update the appearance but leave the pose as is
+                    random_texture = random_animal_texture
+                    while random_animal_texture == random_texture:
+                        random_texture = random.randint(0, len(beautiful_textures_path_list) - 1)
+                        animal_texture = beautiful_textures_path_list[random_texture]
+                    animal.set_texture(animal_texture)
+                elif triplet == "p1a1":
+                    if break_while:
+                        break
+                    # update the pose but leave the appearance as is
+                    # print("Setting new pose.")
+                    param = random.choice(render_params)
+                    mesh, anim, ratio, dist, az, el = param
+
+                env.set_floor(floor_texture)
+                env.set_sky(sky_texture)
+
+                animal.set_animation(anim, ratio)
+
+                # Capture data
+                animal.set_tracking_camera(dist, az, el)
+                shift_camera_animal(global_animal)
+
+                img = animal.get_img()
+                seg = animal.get_seg()
+                depth = animal.get_depth()
+                mask = udb.get_mask(seg, [r, g, b])
+
+                # get kpts
+                ## get cam_loc and cam_rot
+                cam_loc, cam_rot = get_camera_params()
+                cam_loc = [float(item) for item in cam_loc.split(' ')]
+                cam_rot = [float(item) for item in cam_rot.split(' ')]
+
+                ## transform keypoints
+                kp_3d_array = parse_kpts(filename, offset)
+                kpts, kpts_z = transform_kpts(cam_loc, cam_rot, kp_3d_array, depth)
+
+                ## transform images and kpts
+                img = Image.fromarray(img[:, :, :3])
+                seg_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.uint8)
+                seg_mask[mask == False] = 0  # tiger/horse
+                seg_mask[mask == True] = 255  # tiger/horse
+
+                # # save imgs
+                if global_animal == 'tiger':
+                    kp_18_id = [2679, 2753, 2032, 1451, 1287, 3085, 1632, 229, 1441, 1280, 2201, 1662, 266, 158,
+                                270,
+                                152,
+                                219, 129]
+                elif global_animal == 'horse':
+                    kp_18_id = [1718, 1684, 1271, 1634, 1650, 1643, 1659, 925, 392, 564, 993, 726, 1585, 1556, 427,
+                                1548,
+                                967, 877]
+                elif global_animal == 'domestic_sheep':
+                    kp_18_id = [2046, 1944, 1267, 1875, 1900, 1868, 1894, 687, 173, 1829, 1422, 821, 624, 580, 622,
+                                575,
+                                1370, 716]
+                elif global_animal == 'hellenic_hound':
+                    kp_18_id = [2028, 2580, 912, 878, 977, 1541, 1734, 480, 799, 1575, 1446, 602, 755, 673, 780,
+                                1580,
+                                466,
+                                631]
+                elif global_animal == 'elephant':
+                    kp_18_id = [1980, 2051, 1734, 2122, 2155, 2070, 2166, 681, 923, 1442, 1041, 1528, 78, 599, 25,
+                                595,
+                                171,
+                                570]
+                else:
+                    print("WARNING THIS ANIMAL HAS NO CORRECT KEYPOINTS YET - DO NOT USE!!")
+                    kp_18_id = [2028, 2580, 912, 878, 977, 1541, 1734, 480, 799, 1575, 1446, 602, 755, 673, 780,
+                                1580,
+                                466,
+                                631]
+                # print(triplet, sum(kpts[kp_18_id, 2]))
+                if sum(kpts[kp_18_id, 2]) >= 4:
+
+                    arr = kpts[kp_18_id]
+                    # set non visible points to zero
+                    arr[arr[:, 2] == 0] = [0, 0, 0]
+                    arr = arr[:, :2]
+                    # create output folder for images e.g. synthetic_animals/{animal}/{video}
+                    sequence_output_dir = output_dir
+                    sequence_dir_filename = os.path.join(sequence_output_dir,
+                                                         filename.replace(".png", f"_{triplet}.png"))
+                    filename_mask = filename.replace(".png", f"_mask_{triplet}.png")
+                    filename_mask_whitened = filename.replace(".png", f"_mask_white_{triplet}.png")
+                    sequence_dir_filename_mask = os.path.join(sequence_output_dir, filename_mask)
+                    sequence_dir_filename_mask_whitened = os.path.join(sequence_output_dir, filename_mask_whitened)
+                    if not os.path.isdir(sequence_output_dir): os.makedirs(sequence_output_dir)
+                    whitened_img = np.array(copy.deepcopy(img))
+                    whitened_img[~mask] = 255
+                    imageio.imwrite(sequence_dir_filename_mask, seg_mask)
+                    imageio.imwrite(sequence_dir_filename_mask_whitened, whitened_img)
+                    imageio.imwrite(sequence_dir_filename, img)
+
                     if triplet == "p0a0":
-                        print(triplet)
-                        if p0a0_tried:
-                            goto_p1a1 = True
-                            continue
-                        p0a0_tried = True
-                    elif triplet == "p0a1":
-                        print(triplet)
-                        if (p0a0_tried and not p0a0):
-                            # p0a0 was false so p0a1 will be false as well
-                            # we set all of them true to break the while loop
-                            p0a0, p0a1, p1a1 = True, True, True
-                            print("Breaking the loop.")
-                            break
-                        if goto_p1a1:
-                            continue
-                        # update the appearance but leave the pose as is
-                        random_texture = video
-                        while video == random_texture:
-                            random_texture = random.randint(0, len(beautiful_textures_path_list))
-                            animal_texture = beautiful_textures_path_list[random_texture]
-                        animal.set_texture(animal_texture)
-                    elif triplet == "p1a1":
-                        # update the pose but leave the appearance as is
-                        print("Setting new pose.")
-                        param = random.choice(render_params)
-                        mesh, anim, ratio, dist, az, el = param
-
-                    env.set_floor(floor_texture)
-                    env.set_sky(sky_texture)
-
-                    animal.set_animation(anim, ratio)
-
-                    # Capture data
-                    animal.set_tracking_camera(dist, az, el)
-                    shift_camera_animal(global_animal)
-
-                    img = animal.get_img()
-                    seg = animal.get_seg()
-                    depth = animal.get_depth()
-                    mask = udb.get_mask(seg, [r, g, b])
-
-                    # get kpts
-                    ## get cam_loc and cam_rot
-                    cam_loc, cam_rot = get_camera_params()
-                    cam_loc = [float(item) for item in cam_loc.split(' ')]
-                    cam_rot = [float(item) for item in cam_rot.split(' ')]
-
-                    ## transform keypoints
-                    kp_3d_array = parse_kpts(filename, offset)
-                    kpts, kpts_z = transform_kpts(cam_loc, cam_rot, kp_3d_array, depth)
-
-                    ## transform images and kpts
-                    img = Image.fromarray(img[:, :, :3])
-                    seg_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.uint8)
-                    seg_mask[mask == False] = 0  # tiger/horse
-                    seg_mask[mask == True] = 255  # tiger/horse
-
-                    # # save imgs
-                    if global_animal == 'tiger':
-                        kp_18_id = [2679, 2753, 2032, 1451, 1287, 3085, 1632, 229, 1441, 1280, 2201, 1662, 266, 158,
-                                    270,
-                                    152,
-                                    219, 129]
-                    elif global_animal == 'horse':
-                        kp_18_id = [1718, 1684, 1271, 1634, 1650, 1643, 1659, 925, 392, 564, 993, 726, 1585, 1556, 427,
-                                    1548,
-                                    967, 877]
-                    elif global_animal == 'domestic_sheep':
-                        kp_18_id = [2046, 1944, 1267, 1875, 1900, 1868, 1894, 687, 173, 1829, 1422, 821, 624, 580, 622,
-                                    575,
-                                    1370, 716]
-                    elif global_animal == 'hellenic_hound':
-                        kp_18_id = [2028, 2580, 912, 878, 977, 1541, 1734, 480, 799, 1575, 1446, 602, 755, 673, 780,
-                                    1580,
-                                    466,
-                                    631]
-                    elif global_animal == 'elephant':
-                        kp_18_id = [1980, 2051, 1734, 2122, 2155, 2070, 2166, 681, 923, 1442, 1041, 1528, 78, 599, 25,
-                                    595,
-                                    171,
-                                    570]
-                    else:
-                        print("WARNING THIS ANIMAL HAS NO CORRECT KEYPOINTS YET - DO NOT USE!!")
-                        kp_18_id = [2028, 2580, 912, 878, 977, 1541, 1734, 480, 799, 1575, 1446, 602, 755, 673, 780,
-                                    1580,
-                                    466,
-                                    631]
-                    print(triplet, sum(kpts[kp_18_id, 2]))
-                    if sum(kpts[kp_18_id, 2]) >= 4:
-
-                        arr = kpts[kp_18_id]
-                        # set non visible points to zero
-                        arr[arr[:, 2] == 0] = [0, 0, 0]
-                        arr = arr[:, :2]
-                        # create output folder for images e.g. synthetic_animals/{animal}/{video}
-                        sequence_output_dir = output_dir + str(video)
-                        sequence_dir_filename = os.path.join(sequence_output_dir,
-                                                             filename.replace(".png", f"_{triplet}.png"))
-                        filename_mask = filename.replace(".png", f"_mask_{triplet}.png")
-                        filename_mask_whitened = filename.replace(".png", f"_mask_white_{triplet}.png")
-                        sequence_dir_filename_mask = os.path.join(sequence_output_dir, filename_mask)
-                        sequence_dir_filename_mask_whitened = os.path.join(sequence_output_dir, filename_mask_whitened)
-                        if not os.path.isdir(sequence_output_dir): os.makedirs(sequence_output_dir)
-                        whitened_img = np.array(copy.deepcopy(img))
-                        whitened_img[~mask] = 255
-                        imageio.imwrite(sequence_dir_filename_mask, seg_mask)
-                        imageio.imwrite(sequence_dir_filename_mask_whitened, whitened_img)
-                        imageio.imwrite(sequence_dir_filename, img)
-                        # masked_frames.append(os.path.join(sequence_output_dir, filename_mask))
-                        # whitened_frames.append(os.path.join(sequence_output_dir, filename_mask_whitened))
-                        # frame_names.append(sequence_dir_filename)
-                        # extracted_kpts.append(arr)
-                        # fid.append(img_idx)
-                        # vids.append(vid)
-
-                        if triplet == "p0a0":  # ["p0a0", "p0a1", "p1a1"]
-                            p0a0 = True
-                            p0a0_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
-                            p0a0_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
-                            p0a0_frame_names.append(sequence_dir_filename)
-                            p0a0_extracted_kpts.append(arr)
-                        if triplet == "p0a1":
-                            p0a1 = True
-                            p0a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
-                            p0a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
-                            p0a1_frame_names.append(sequence_dir_filename)
-                            p0a1_extracted_kpts.append(arr)
-                        if triplet == "p1a1":
-                            p1a1 = True
-                            p1a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
-                            p1a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
-                            p1a1_frame_names.append(sequence_dir_filename)
-                            p1a1_extracted_kpts.append(arr)
-
+                        p0a0 = True
+                        p0a0_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                        p0a0_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                        p0a0_frame_names.append(sequence_dir_filename)
+                        p0a0_extracted_kpts.append(arr)
+                    if triplet == "p0a1":
+                        p0a1 = True
+                        p0a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                        p0a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                        p0a1_frame_names.append(sequence_dir_filename)
+                        p0a1_extracted_kpts.append(arr)
+                    if triplet == "p1a1":
+                        p1a1 = True
+                        p1a1_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                        p1a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                        p1a1_frame_names.append(sequence_dir_filename)
+                        p1a1_extracted_kpts.append(arr)
                         img_idx += 1
-                        if img_idx > num_images - 1:
-                            break
-
-    assert len(frame_names) == len(extracted_kpts) == len(fid) == len(vids)
-    return frame_names, masked_frames, whitened_frames, np.array(extracted_kpts), np.array(fid), np.array(vids)
+                    if img_idx == num_images:
+                        # assert len(p0a0_list_whitened) == len(p0a0_list_masked) == len(p0a0_frame_names) == len(
+                        #    p0a0_extracted_kpts)
+                        return p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, \
+                               np.array(p0a0_extracted_kpts), p0a1_list_whitened, p0a1_list_masked, \
+                               p0a1_frame_names, np.array(p0a1_extracted_kpts), p1a1_list_whitened, p1a1_list_masked, \
+                               p1a1_frame_names, np.array(p1a1_extracted_kpts)
 
 
 if __name__ == "__main__":
@@ -506,51 +499,58 @@ if __name__ == "__main__":
     # horse, tiger, , elephant, cat, scotland_cattle
 
     parser.add_argument('--animal', default='horse', type=str,
-                        help='horse | tiger | domestic_sheep | hellenic_hound | scotland_cattle | elephant')
-    parser.add_argument('--videos', default=100, type=int,
-                        help='Number of videos to create')
+                        help='horse | tiger | domestic_sheep | hellenic_hound | cat | elephant')
     parser.add_argument('--num-imgs', default=100, type=int,
                         help='Number of images in the sequence (default: 100, to gen GT)')
     parser.add_argument('--random-texture-path', default='./data_generation/val2017', type=str,
                         help='coco val 2017')
-    # parser.add_argument('--output-path', default='./data_generation/generated_data', type=str,
-    #                   help='output directory')
     parser.add_argument('--use-random-texture', action='store_true', default=True,
                         help='whether use random texture for the animal or not')
     args = parser.parse_args()
 
-    frame_names, masked_frames, whitened_frames, extracted_kpts, fid, vids = retrieve(animal=args.animal,
-                                                                                      num_videos=args.videos,
-                                                                                      num_images=args.num_imgs,
-                                                                                      use_random_texture=args.use_random_texture)
+    mydict = dict()
 
+    p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, p0a0_extracted_kpts, p0a1_list_whitened, \
+    p0a1_list_masked, p0a1_frame_names, p0a1_extracted_kpts, p1a1_list_whitened, p1a1_list_masked, \
+    p1a1_frame_names, p1a1_extracted_kpts = retrieve(animal=args.animal, num_images=args.num_imgs,
+                                                     use_random_texture=args.use_random_texture)
+    mydict["p0a0"] = (p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, p0a0_extracted_kpts)
+    mydict["p0a1"] = (p0a1_list_whitened, p0a1_list_masked, p0a1_frame_names, p0a1_extracted_kpts)
+    mydict["p1a1"] = (p1a1_list_whitened, p1a1_list_masked, p1a1_frame_names, p1a1_extracted_kpts)
     # Save as Metadatset
     META_DIR = f"synthetic_animals_triplet/{args.animal}s_meta/"
     META_LABEL_DIR = META_DIR + "labels/"
     if not os.path.isdir(META_DIR): os.makedirs(META_DIR)
     if not os.path.isdir(META_LABEL_DIR): os.makedirs(META_LABEL_DIR)
 
-    import edflow
-    from edflow.data.believers import meta_loaders, meta_util, meta_view
+    from edflow.data.believers import meta_util
     import yaml
 
     dict_file = {
         'description': f"Synthetic animals triplet - {args.animal}",
-        'loaders': {
-            'frames': 'image'},
+        # 'loaders': {
+        #    'frames': 'image'},
         'loader_kwargs': {
-            'frames': {
-                'support': "0->1"
-            },
+            # 'frames': {
+            #    'support': "0->1"
+            # },
         },
     }
+
+    for key, triplet in mydict.items():
+        meta_util.store_label_mmap(np.array(triplet[0]), META_LABEL_DIR, f"{key}_whitened_frames:image")
+        meta_util.store_label_mmap(np.array(triplet[1]), META_LABEL_DIR, f"{key}_masked_frames:image")
+        meta_util.store_label_mmap(np.array(triplet[2]), META_LABEL_DIR, f"{key}_frames:image")
+        meta_util.store_label_mmap(np.array(triplet[3]), META_LABEL_DIR, f"{key}_kps")
+        dict_file["loader_kwargs"][f"{key}_whitened_frames:image"] = {'support': "0->1"}
+        dict_file["loader_kwargs"][f"{key}_masked_frames:image"] = {'support': "0->1"}
+        dict_file["loader_kwargs"][f"{key}_frames:image"] = {'support': "0->1"}
 
     with open(f"{META_DIR}meta.yaml", 'w') as file:
         documents = yaml.dump(dict_file, file)
 
-    meta_util.store_label_mmap(np.array(vids), META_LABEL_DIR, "vid")
-    meta_util.store_label_mmap(np.array(frame_names), META_LABEL_DIR, "frames:image")
-    meta_util.store_label_mmap(np.array(masked_frames), META_LABEL_DIR, "masked_frames:image")
-    meta_util.store_label_mmap(np.array(whitened_frames), META_LABEL_DIR, "whitened_frames:image")
-    meta_util.store_label_mmap(np.array(fid), META_LABEL_DIR, "fid")
-    meta_util.store_label_mmap(np.array(extracted_kpts), META_LABEL_DIR, "kps")
+    # meta_util.store_label_mmap(np.array(p0a0_list_whitened), META_LABEL_DIR, "p0a0_list_whitened:image")
+    # meta_util.store_label_mmap(np.array(masked_frames), META_LABEL_DIR, "masked_frames:image")
+    # meta_util.store_label_mmap(np.array(whitened_frames), META_LABEL_DIR, "whitened_frames:image")
+    # meta_util.store_label_mmap(np.array(fid), META_LABEL_DIR, "fid")
+    # meta_util.store_label_mmap(np.array(extracted_kpts), META_LABEL_DIR, "kps")
