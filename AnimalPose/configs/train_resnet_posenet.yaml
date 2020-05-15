@@ -11,14 +11,14 @@ resnet_type: 18 #50,101,152
 adjust_learning_rate: False
 # Pretraining!
 load_self_pretrained_encoder:
-  active: False
+  active: True
   path: "logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-74000.ckpt"
   #path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
 load_self_pretrained_decoder:
   active: False
   path: "logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-74000.ckpt"
 # Encoder is frozen by default
-freeze_encoder_for: 1 #steps helps to train the decoder in first place
+freeze_encoder_for: 99999999999999 #steps helps to train the decoder in first place
 
 
 #### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!

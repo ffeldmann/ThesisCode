@@ -11,4 +11,3 @@ random_state: 42
 pck_alpha: 0.5
 pck_multi: False
 sequence_step_size: 1 # Steps to be taken from one frame to another
-
