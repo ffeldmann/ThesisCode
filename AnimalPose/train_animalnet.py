@@ -11,6 +11,7 @@ from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 from AnimalPose.utils.LossConstrained import LossConstrained
 import numpy as np
+from edflow.data.util import adjust_support
 
 
 class Iterator(TemplateIterator):
@@ -24,9 +25,12 @@ class Iterator(TemplateIterator):
         self.encoder_2 = True if self.config["encoder_2"] else False
         self.kl_weight = self.config["variational"]["kl_weight"]
 
-        self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"]["start_step"], \
+        try:
+            self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"]["start_step"], \
                                                                                self.config["num_steps"], self.kl_weight, \
                                                                                self.config["variational"]["stop_weight"]
+        except:
+            print("Some infos not found")
         self.loss_constrained = LossConstrained(self.config)
         self.sigmoid = torch.nn.Sigmoid()
         # vgg loss
@@ -37,12 +41,12 @@ class Iterator(TemplateIterator):
         # if self.config["losses"]["KL"]:
         #     self.klloss = torch.nn.KLDivLoss(reduction="batchmean")
         # # initalize perceptual loss if possible
-        # if self.config["losses"]["perceptual"]:
-        #     net = self.config["losses"]["perceptual_network"]
-        #     assert net in ["alex", "squeeze",
-        #                    "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
-        #     self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
-        #         self.device)
+        if self.config["losses"]["perceptual"]:
+            net = self.config["losses"]["perceptual_network"]
+            assert net in ["alex", "squeeze",
+                           "vgg"], f"Perceptual network needs to be 'alex', 'squeeze' or 'vgg', got {net}"
+            self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=self.cuda, spatial=False).to(
+                self.device)
         if self.cuda:
             self.model.cuda()
 
@@ -148,7 +152,6 @@ class Iterator(TemplateIterator):
             self.optimizer.step()
 
         def log_op():
-            from edflow.data.util import adjust_support
             is_train = self.get_split() == "train"
             logs = {
                 "images": {
@@ -189,12 +192,81 @@ class Iterator(TemplateIterator):
             return logs
 
         def eval_op():
-            # percentage correct keypoints pck
-            # return {
-            # "outputs": np.array(predictions.cpu().detach().numpy()),
-            # TODO in which shape is the outputs necessary for evaluation?
-            # "labels": {k: [v.cpu().detach().numpy()] for k, v in losses["batch"].items()},
-            # }
+            return
+
+        return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
+
+
+class TripletIterator(Iterator):
+    def step_op(self, model, **kwargs):
+        # set model to train / eval mode
+        is_train = self.get_split() == "train"
+        model.train(is_train)
+        # inp0 -> p0a0
+        # inp1 -> p0a1
+        # inp2 -> p1a1
+        # (batch_size, width, height, channel)
+        inputs0 = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
+        if self.encoder_2:
+            inputs2 = numpy2torch(kwargs["inp2"].transpose(0, 3, 1, 2)).to("cuda")
+        # (batch_size, channel, width, height)
+        # compute model
+        if self.encoder_2:
+            if self.variational:
+                predictions, mu, logvar = model(inputs0, inputs2)
+            else:
+                predictions = model(inputs0, inputs2)
+        else:
+            if self.variational:
+                predictions, mu, logvar = model(inputs0)
+            else:
+                predictions = model(inputs0)
+        # in order to make the output in range between 0 and 1
+        predictions = self.sigmoid(predictions)
+        # compute loss
+        # Target heatmaps, predicted heatmaps, gt_coords
+        loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2),
+                                                         predictions, mu, logvar,
+                                                         self.get_global_step())
+        if is_train:
+            loss_train_op()
+
+        # compute perceptual loss reconstruction
+        # loss(predictions, inp1) where inp2 is p1a1
+        inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")
+        loss_dis = torch.mean(self.perceptual_loss(predictions, inputs1))
+
+        def train_op():
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+        def log_op():
+
+            logs = {
+                "images": {
+                    "p0a0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "p0a1": adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "p1a1": adjust_support(torch2numpy(inputs2).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "disentanglement": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                },
+                "scalars": {
+                    "loss": loss,
+                    "loss_dis": loss_dis,
+                },
+            }
+            logs["scalars"]["lambda_"] = log["scalars"]["lambda_"]
+            logs["scalars"]["gain"] = log["scalars"]["gain"]
+            logs["scalars"]["active"] = log["scalars"]["active"]
+            logs["scalars"]["kl_loss"] = log["scalars"]["kl_loss"]
+            logs["scalars"]["nll_loss"] = log["scalars"]["nll_loss"]
+            logs["scalars"]["rec_loss"] = log["scalars"]["rec_loss"]
+            logs["scalars"]["mu"] = log["scalars"]["mu"]
+            logs["scalars"]["eps"] = log["scalars"]["eps"]
+
+            return logs
+
+        def eval_op():
             return
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}

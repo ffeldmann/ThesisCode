@@ -157,9 +157,9 @@ class AnimalTriplet_Abstract(DatasetMixin):
         image_p0a1 = self.resize(image=image_p0a1)
         image_p1a1 = self.resize(image=image_p1a1)
 
-        output["p0a0"] = adjust_support(image_p0a0, "0->1")
-        output["p0a1"] = adjust_support(image_p0a1, "0->1")
-        output["p1a1"] = adjust_support(image_p1a1, "0->1")
+        output["inp0"] = adjust_support(image_p0a0, "0->1")  # p0a0
+        output["inp1"] = adjust_support(image_p0a1, "0->1")  # p0a1
+        output["inp2"] = adjust_support(image_p1a1, "0->1")  # p1a1
         output["animal_class"] = np.array(animal_class[self.data.data.animal])
         return output
 
