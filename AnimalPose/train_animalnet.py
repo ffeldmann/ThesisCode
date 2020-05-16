@@ -118,6 +118,7 @@ class Iterator(TemplateIterator):
                 if not is_train:
                     inputs1_flipped = torch.flip(inputs1, [0])  # flip the tensor in zero dimension
                     kl_test_preds, _, _ = model(inputs0, inputs1_flipped)
+                    kl_test_preds = self.sigmoid(kl_test_preds)
             else:
                 predictions = model(inputs0, inputs1)
         else:
@@ -125,12 +126,14 @@ class Iterator(TemplateIterator):
                 predictions, mu, logvar = model(inputs0)
             else:
                 predictions = model(inputs0)
-        predictions = self.sigmoid(predictions) # in order to make the output in range between 0 and 1
+        predictions = self.sigmoid(predictions)  # in order to make the output in range between 0 and 1
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar, self.get_global_step())
+        loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar,
+                                                         self.get_global_step())
         if is_train:
             loss_train_op()
+
         # if self.variational:
         #     if self.encoder_2:
         #         losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
@@ -164,7 +167,6 @@ class Iterator(TemplateIterator):
             logs["scalars"]["rec_loss"] = log["scalars"]["rec_loss"]
             logs["scalars"]["mu"] = log["scalars"]["mu"]
             logs["scalars"]["eps"] = log["scalars"]["eps"]
-
 
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
