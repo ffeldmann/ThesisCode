@@ -308,15 +308,19 @@ def retrieve(animal, num_images, use_random_texture):
     p0a0_frame_names = []
     p0a1_frame_names = []
     p1a1_frame_names = []
+    p1a0_frame_names = []
     p0a0_extracted_kpts = []
     p0a1_extracted_kpts = []
     p1a1_extracted_kpts = []
+    p1a0_extracted_kpts = []
     p0a0_list_whitened = []
     p0a1_list_whitened = []
     p1a1_list_whitened = []
+    p1a0_list_whitened = []
     p0a0_list_masked = []
     p0a1_list_masked = []
     p1a1_list_masked = []
+    p1a0_list_masked = []
 
     img_idx = 0
     sky_texture = "/export/home/ffeldman/Masterarbeit/data/white.jpg"  # random.choice(bg_path_list)
@@ -330,21 +334,23 @@ def retrieve(animal, num_images, use_random_texture):
         mesh, anim, ratio, dist, az, el = param
         filename = make_filename(img_idx, mesh, anim, ratio, dist, az, el)
 
-        p0a0, p0a1, p1a1 = False, False, False
+        p0a0, p0a1, p1a1, p1a0 = False, False, False, False
         p0a0_tried = False
         goto_p1a1 = False
 
         def check_triplet():
-            return p0a0 and p0a1 and p1a1
+            return p0a0 and p0a1 and p1a1 and p1a0
 
         # Update the scene
         env.set_random_light()
         break_while = False
-        print("Here before while.")
+        #print("Here before while.")
         while not check_triplet():
             print("Image idx:", img_idx)
-            for triplet in ["p0a0", "p0a1", "p1a1"]:
-                print(triplet, p0a0, p0a1, p1a1)
+            appearance_zero = beautiful_textures_path_list[random_animal_texture]
+            for triplet in ["p0a0", "p0a1", "p1a1", "p1a0"]:
+                #rint(triplet, p0a0, p0a1, p1a1, p1a0)
+                #print()
                 if triplet == "p0a0":
                     if p0a0_tried and p0a0:
                         goto_p1a1 = True
@@ -356,7 +362,7 @@ def retrieve(animal, num_images, use_random_texture):
                         # we set all of them true to break the while loop
                         p0a0, p0a1, p1a1 = True, True, True
                         break_while = True
-                        print("Breaking the loop.")
+                        #print("Breaking the loop.")
                         break
                     if goto_p1a1:
                         continue
@@ -373,6 +379,10 @@ def retrieve(animal, num_images, use_random_texture):
                     # print("Setting new pose.")
                     param = random.choice(render_params)
                     mesh, anim, ratio, dist, az, el = param
+                elif triplet == "p1a0":
+                    if break_while:
+                        break
+                    animal.set_texture(appearance_zero)
 
                 env.set_floor(floor_texture)
                 env.set_sky(sky_texture)
@@ -434,7 +444,6 @@ def retrieve(animal, num_images, use_random_texture):
                                 1580,
                                 466,
                                 631]
-                # print(triplet, sum(kpts[kp_18_id, 2]))
                 if sum(kpts[kp_18_id, 2]) >= 4:
 
                     arr = kpts[kp_18_id]
@@ -474,6 +483,12 @@ def retrieve(animal, num_images, use_random_texture):
                         p1a1_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
                         p1a1_frame_names.append(sequence_dir_filename)
                         p1a1_extracted_kpts.append(arr)
+                    if triplet == "p1a0":
+                        p1a0 = True
+                        p1a0_list_whitened.append(os.path.join(sequence_output_dir, filename_mask_whitened))
+                        p1a0_list_masked.append(os.path.join(sequence_output_dir, filename_mask))
+                        p1a0_frame_names.append(sequence_dir_filename)
+                        p1a0_extracted_kpts.append(arr)
                         img_idx += 1
                     if img_idx == num_images:
                         # assert len(p0a0_list_whitened) == len(p0a0_list_masked) == len(p0a0_frame_names) == len(
@@ -481,7 +496,8 @@ def retrieve(animal, num_images, use_random_texture):
                         return p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, \
                                np.array(p0a0_extracted_kpts), p0a1_list_whitened, p0a1_list_masked, \
                                p0a1_frame_names, np.array(p0a1_extracted_kpts), p1a1_list_whitened, p1a1_list_masked, \
-                               p1a1_frame_names, np.array(p1a1_extracted_kpts)
+                               p1a1_frame_names, np.array(p1a1_extracted_kpts), p1a0_list_whitened, p1a0_list_masked, \
+                               p1a0_frame_names, np.array(p1a0_extracted_kpts)
 
 
 if __name__ == "__main__":
@@ -512,11 +528,13 @@ if __name__ == "__main__":
 
     p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, p0a0_extracted_kpts, p0a1_list_whitened, \
     p0a1_list_masked, p0a1_frame_names, p0a1_extracted_kpts, p1a1_list_whitened, p1a1_list_masked, \
-    p1a1_frame_names, p1a1_extracted_kpts = retrieve(animal=args.animal, num_images=args.num_imgs,
+    p1a1_frame_names, p1a1_extracted_kpts, p1a0_list_whitened, p1a0_list_masked, \
+    p1a0_frame_names, p1a0_extracted_kpts = retrieve(animal=args.animal, num_images=args.num_imgs,
                                                      use_random_texture=args.use_random_texture)
     mydict["p0a0"] = (p0a0_list_whitened, p0a0_list_masked, p0a0_frame_names, p0a0_extracted_kpts)
     mydict["p0a1"] = (p0a1_list_whitened, p0a1_list_masked, p0a1_frame_names, p0a1_extracted_kpts)
     mydict["p1a1"] = (p1a1_list_whitened, p1a1_list_masked, p1a1_frame_names, p1a1_extracted_kpts)
+    mydict["p1a0"] = (p1a0_list_whitened, p1a0_list_masked, p1a0_frame_names, p1a0_extracted_kpts)
     # Save as Metadatset
     META_DIR = f"synthetic_animals_triplet/{args.animal}s_meta/"
     META_LABEL_DIR = META_DIR + "labels/"
