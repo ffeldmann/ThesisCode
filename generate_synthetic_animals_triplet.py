@@ -331,6 +331,7 @@ def retrieve(animal, num_images, use_random_texture):
     for i, param in enumerate(tqdm(render_params)):
         random_animal_texture = random.randint(0, len(beautiful_textures_path_list) - 1)
         animal_texture = beautiful_textures_path_list[random_animal_texture]
+        animal.set_texture(animal_texture)
         mesh, anim, ratio, dist, az, el = param
         filename = make_filename(img_idx, mesh, anim, ratio, dist, az, el)
 
@@ -349,8 +350,7 @@ def retrieve(animal, num_images, use_random_texture):
             print("Image idx:", img_idx)
             appearance_zero = beautiful_textures_path_list[random_animal_texture]
             for triplet in ["p0a0", "p0a1", "p1a1", "p1a0"]:
-                #rint(triplet, p0a0, p0a1, p1a1, p1a0)
-                #print()
+                print(triplet, p0a0, p0a1, p1a1, p1a0)
                 if triplet == "p0a0":
                     if p0a0_tried and p0a0:
                         goto_p1a1 = True
@@ -360,7 +360,7 @@ def retrieve(animal, num_images, use_random_texture):
                     if (p0a0_tried and not p0a0):
                         # p0a0 was false so p0a1 will be false as well
                         # we set all of them true to break the while loop
-                        p0a0, p0a1, p1a1 = True, True, True
+                        p0a0, p0a1, p1a1, p1a0 = True, True, True, True
                         break_while = True
                         #print("Breaking the loop.")
                         break
@@ -373,6 +373,8 @@ def retrieve(animal, num_images, use_random_texture):
                         animal_texture = beautiful_textures_path_list[random_texture]
                     animal.set_texture(animal_texture)
                 elif triplet == "p1a1":
+                    if p1a1:
+                        continue
                     if break_while:
                         break
                     # update the pose but leave the appearance as is
@@ -380,9 +382,13 @@ def retrieve(animal, num_images, use_random_texture):
                     param = random.choice(render_params)
                     mesh, anim, ratio, dist, az, el = param
                 elif triplet == "p1a0":
+                    animal.set_texture(appearance_zero)
+
                     if break_while:
                         break
-                    animal.set_texture(appearance_zero)
+                    if not p1a1:
+                        continue
+
 
                 env.set_floor(floor_texture)
                 env.set_sky(sky_texture)
@@ -444,6 +450,7 @@ def retrieve(animal, num_images, use_random_texture):
                                 1580,
                                 466,
                                 631]
+                if not sum(kpts[kp_18_id, 2]) >= 4: print(triplet, "Not enough keypoints.")
                 if sum(kpts[kp_18_id, 2]) >= 4:
 
                     arr = kpts[kp_18_id]

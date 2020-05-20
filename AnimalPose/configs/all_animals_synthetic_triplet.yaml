@@ -1,6 +1,6 @@
 dataset: AnimalPose.data.AllAnimalTriplet_Train
 validation_dataset: AnimalPose.data.AllAnimalTriplet_Validation
-animals: ["horse"]#, "cat", "tiger", "hellenic_hound", "domestic_sheep"]
+animals: ["domestic_sheep"]#, "cat", "tiger", "hellenic_hound", "domestic_sheep"]
 synthetic: True # Placeholder, just important for the dataloader
 image_type: "white" # "mask" "white" "none"
 n_classes: 20

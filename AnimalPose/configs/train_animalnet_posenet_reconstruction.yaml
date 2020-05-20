@@ -1,4 +1,4 @@
-iterator: AnimalPose.train_animalnet.Iterator
+iterator: AnimalPose.train_animalnet.ReconstructionIterator
 model: AnimalPose.models.AnimalPosenet
 batch_size: 8 # 32 on quattro
 num_steps: 160000

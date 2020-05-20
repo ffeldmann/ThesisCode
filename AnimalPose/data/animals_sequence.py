@@ -218,7 +218,7 @@ class Animal_Sequence_Abstract(DatasetMixin):
             output[f"kps{i}"] = keypoints
             output[f"targets{i}"] = adjust_support(make_heatmaps(output[f"inp{i}"], keypoints, sigma=self.sigma),
                                                    "0->1")
-            output[f"vid_id_appearance{i}"] = np.array(example["labels_"][ex_idx]["video_class"])
+            output[f"global_video_class{i}"] = np.array(example["labels_"][ex_idx]["global_video_class"])
             output[f"animal_class"] = np.array(animal_class[self.animal])
             output[f"targets{i}_image"] = heatmaps_to_image(
                 output[f"targets{i}"].copy().reshape(1, len(keypoints), height, width)).reshape(width, height, 1)

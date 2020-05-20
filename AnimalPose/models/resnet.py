@@ -8,7 +8,7 @@ class ResnetTorchVisionClass(nn.Module):
         resnet = getattr(models, "resnet" + str(config.get("resnet_type", "50")))(
             pretrained=config.get("pretrained", False))
         num_ftrs = resnet.fc.in_features
-        num_classes = 5
+        num_classes = config["num_classes_classification"]
         resnet.fc = nn.Linear(num_ftrs, num_classes)
         self.model = resnet
     def forward(self, x):

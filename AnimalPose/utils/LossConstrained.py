@@ -17,20 +17,22 @@ class LossConstrained(nn.Module):
         self.config = config
         self.lambda_init = retrieve(config, "LossConstrained/lambda_init", default=100000.0)
         self.register_buffer("lambda_", torch.ones(size=()) * self.lambda_init)
-        self.mu = retrieve(config, "LossConstrained/mu", default=0.05)
-        self.eps = retrieve(config, "LossConstrained/eps", default=0.1)  # 30.72)  # mean of 0.01
+        self.mu = retrieve(config, "LossConstrained/mu", default=0.01)  # anpassung loss
+        self.eps = retrieve(config, "LossConstrained/eps", default=0.4)  # max rec loss # 30.72)  # mean of 0.01
         net = self.config["losses"]["perceptual_network"]
         self.perceptual_loss = PerceptualLoss(model='net-lin', net=net, use_gpu=True, spatial=False).to("cuda")
         self.device = "cuda"
 
     def forward(self, inputs, reconstructions, mu, logvar, global_step):
         # L2 Loss
+        # [B, C, W, H] - [B, C, W, H]
         # rec_loss = (inputs - reconstructions) ** 2
         # rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
         # rec_mean = rec_loss.mean()
         # Perceptual
         rec_loss = self.perceptual_loss(torch.from_numpy(inputs).float().to(self.device),
                                         reconstructions.to(self.device), True)
+        #TODO: torch.mean()??
         rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
         rec_mean = rec_loss.mean()
 

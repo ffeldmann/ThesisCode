@@ -137,29 +137,37 @@ class AnimalTriplet_Abstract(DatasetMixin):
         if self.config.get("image_type", "") == "mask":
             image_p0a0 = example["p0a0_masked_frames"]()
             image_p0a1 = example["p0a1_masked_frames"]()
+            image_p1a0 = example["p1a0_masked_frames"]()
             image_p1a1 = example["p1a1_masked_frames"]()
         elif self.config.get("image_type", "") == "white":
             image_p0a0 = example["p0a0_whitened_frames"]()
             image_p0a1 = example["p0a1_whitened_frames"]()
+            image_p1a0 = example["p1a0_whitened_frames"]()
             image_p1a1 = example["p1a1_whitened_frames"]()
         else:
             image_p0a0 = example["p0a0_frames"]()
             image_p0a1 = example["p0a1_frames"]()
+            image_p1a0 = example["p1a0_frames"]()
             image_p1a1 = example["p1a1_frames"]()
 
         if self.augmentation:
             # randomly perform some augmentations on the image, keypoints and bboxes
             image_p0a0 = self.seq(image=image_p0a0)
             image_p0a1 = self.seq(image=image_p0a1)
+            image_p1a1 = self.seq(image=image_p1a0)
             image_p1a1 = self.seq(image=image_p1a1)
 
         image_p0a0 = self.resize(image=image_p0a0)
         image_p0a1 = self.resize(image=image_p0a1)
+        image_p1a0 = self.resize(image=image_p1a0)
         image_p1a1 = self.resize(image=image_p1a1)
 
         output["inp0"] = adjust_support(image_p0a0, "0->1")  # p0a0
         output["inp1"] = adjust_support(image_p0a1, "0->1")  # p0a1
-        output["inp2"] = adjust_support(image_p1a1, "0->1")  # p1a1
+        output["inp2"] = adjust_support(image_p1a0, "0->1")  # p1a0
+        output["inp3"] = adjust_support(image_p1a1, "0->1")  # p1a1
+
+
         output["animal_class"] = np.array(animal_class[self.data.data.animal])
         return output
 

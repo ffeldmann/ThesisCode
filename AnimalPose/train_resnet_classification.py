@@ -70,7 +70,7 @@ class Iterator(TemplateIterator):
         # normalization done inplace
         # for inp in inputs: self.normalize(inp)
         # animal labels
-        labels = torch.from_numpy(kwargs["vid_id_appearance0"]).to("cuda")
+        labels = torch.from_numpy(kwargs["global_video_class0"]).to("cuda")
         # compute model
         outputs = model(inputs)
         _, preds = torch.max(outputs, 1)
