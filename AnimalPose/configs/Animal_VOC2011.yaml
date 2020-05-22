@@ -6,7 +6,7 @@ as_grey: False
 sigma: 2 # Good way sigma = size/64 for heatmaps
 crop: True
 augmentation: True
-train_size: 0.8
+train_size: 0.3
 random_state: 42
 pck_alpha: 0.5
 pck_multi: True

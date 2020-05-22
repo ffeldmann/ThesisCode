@@ -10,8 +10,10 @@ from AnimalPose.utils.loss_utils import VGGLossWithL1
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 from AnimalPose.utils.LossConstrained import LossConstrained
+from AnimalPose.models.resnet import ResnetTorchVisionClass
 import numpy as np
 from edflow.data.util import adjust_support
+from edflow.util import retrieve
 
 
 class Iterator(TemplateIterator):
@@ -24,6 +26,12 @@ class Iterator(TemplateIterator):
         self.variational = self.config["variational"]["active"]
         self.encoder_2 = True if self.config["encoder_2"] else False
         self.kl_weight = self.config["variational"]["kl_weight"]
+        if retrieve(self.config, "classifier/active", default=False):
+            self.classifier = ResnetTorchVisionClass(self.config).to(self.device)
+            # Load pretrained classifier into memory
+            self.logger.info(f"Loading weights for classifier from {self.config['classifier']['weights']}")
+            state_dict = torch.load(self.config["classifier"]["weights"], map_location=self.device)["model"]
+            self.classifier.load_state_dict(state_dict)
 
         try:
             self.start_step, self.stop_step, self.start_weight, self.stop_weight = self.config["variational"][
@@ -122,10 +130,20 @@ class Iterator(TemplateIterator):
             if self.variational:
                 predictions, mu, logvar = model(inputs0, inputs1)
                 # Do only in test
-                if not is_train:
+                with torch.no_grad():
                     inputs1_flipped = torch.flip(inputs1, [0])  # flip the tensor in zero dimension
                     kl_test_preds, _, _ = model(inputs0, inputs1_flipped)
                     kl_test_preds = self.sigmoid(kl_test_preds)
+                    if retrieve(self.config, "classifier/active", default=False):
+                        class_prediction = self.classifier(kl_test_preds)
+                        _, preds = torch.max(class_prediction, 1)
+                        # as inputs1 is flipped, the labels need also to be flipped
+                        labels = torch.flip(torch.from_numpy(kwargs["global_video_class1"]).to("cuda"), [0])
+                        # Compute accuracy for batch
+                        corrects = torch.sum(preds == labels.data)
+                        accuracy = corrects.double() / self.config["batch_size"]
+
+                    # output[f"global_video_class{i}"]
             else:
                 predictions = model(inputs0, inputs1)
         else:
@@ -182,11 +200,13 @@ class Iterator(TemplateIterator):
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
                                                                  "0->1")
-                if not is_train and self.variational:
+                if self.variational:
                     logs["images"]["image_input_1_flipped"] = adjust_support(
                         torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
                     logs["images"]["pose_reconstruction"] = adjust_support(
                         torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1")
+                    if retrieve(self.config, "classifier/active", default=False):
+                        logs["scalars"]["accuracy"] = accuracy
             # if self.kl_weight:
             #     logs["scalars"]["kl_weight"] = self.kl_weight
             # if self.config["losses"]["L2"]:
@@ -244,8 +264,8 @@ class TripletIterator(Iterator):
         # loss(predictions, inp1) where inp2 is p1a1
         # Testing:
         with torch.no_grad():
-            inputs3 = numpy2torch(kwargs["inp3"].transpose(0, 3, 1, 2)).to("cuda") # p0a0
-            inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda") # p0a0
+            inputs3 = numpy2torch(kwargs["inp3"].transpose(0, 3, 1, 2)).to("cuda")  # p0a0
+            inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")  # p0a0
             testing, _, _ = model(inputs0, inputs3)
             testing = self.sigmoid(testing)
             loss_dis = torch.mean(self.perceptual_loss(testing, inputs1))

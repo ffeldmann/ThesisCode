@@ -32,7 +32,6 @@ class LossConstrained(nn.Module):
         # Perceptual
         rec_loss = self.perceptual_loss(torch.from_numpy(inputs).float().to(self.device),
                                         reconstructions.to(self.device), True)
-        #TODO: torch.mean()??
         rec_sum = torch.sum(rec_loss) / rec_loss.shape[0]
         rec_mean = rec_loss.mean()
 
@@ -49,6 +48,10 @@ class LossConstrained(nn.Module):
             new_lambda = self.lambda_ + self.mu * gain
             new_lambda = torch.clamp(new_lambda, min=0.0)
             self.lambda_.data.copy_(new_lambda)
+            if self.lambda_ <= 10:
+                self.mu /= 2
+            if self.lambda_ <= 2:
+                self.mu /= 2
 
         loss = nll_loss.cuda() + kl_loss.cuda()
         log = {"images": {"inputs": inputs, "reconstructions": reconstructions},

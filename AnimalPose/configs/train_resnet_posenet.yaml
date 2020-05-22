@@ -4,7 +4,7 @@ batch_size: 16
 num_steps: 60001
 lr: 0.0001
 cuda: true  # False -> use GPU
-ckpt_freq: 2000
+ckpt_freq: 30000
 #Training methods
 pretrained: True
 resnet_type: 18 #50,101,152
@@ -12,13 +12,14 @@ adjust_learning_rate: False
 # Pretraining!
 load_self_pretrained_encoder:
   active: True
-  path: "logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-74000.ckpt"
-  #path: "load_weights/chkpt_020-04-27T16-50-52_DIS_FREEZEEED/model-80000.ckpt"
+  #path: "logs/2020-05-20T15-16-53_BL_Triplet_EPS0.07MU0.5_10k/train/checkpoints/model-334000.ckpt"
+  path: "logs/2020-05-17T23-07-10_TripletwithreconlossEPS0.4MU0.5lambda100k/train/checkpoints/model-394000.ckpt"
 load_self_pretrained_decoder:
   active: False
-  path: "logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-74000.ckpt"
+  #path: "logs/2020-05-20T15-16-53_BL_Triplet_EPS0.07MU0.5_10k/train/checkpoints/model-334000.ckpt"
+  path: "logs/2020-05-17T23-07-10_TripletwithreconlossEPS0.4MU0.5lambda100k/train/checkpoints/model-394000.ckpt"
 # Encoder is frozen by default
-freeze_encoder_for: 99999999999999 #steps helps to train the decoder in first place
+freeze_encoder_for: 999999999 #steps helps to train the decoder in first place
 
 
 #### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!

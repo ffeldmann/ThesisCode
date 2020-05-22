@@ -64,13 +64,13 @@ class Iterator(TemplateIterator):
         # TODO need (batch_size, channel, width, height)
         # kwargs["inp"]
         # (batch_size, width, height, channel)
-        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
+        inputs = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")
         # inputs now
         # (batch_size, channel, width, height)
         # normalization done inplace
         # for inp in inputs: self.normalize(inp)
         # animal labels
-        labels = torch.from_numpy(kwargs["global_video_class0"]).to("cuda")
+        labels = torch.from_numpy(kwargs["global_video_class1"]).to("cuda")
         # compute model
         outputs = model(inputs)
         _, preds = torch.max(outputs, 1)
@@ -108,7 +108,6 @@ class Iterator(TemplateIterator):
             }
             if self.config["losses"]["CEL"]:
                 logs["scalars"]["CrossEntropyLoss"] = losses["batch"]["CEL"]
-
             return logs
 
         def eval_op():

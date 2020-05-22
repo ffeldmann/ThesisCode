@@ -15,6 +15,7 @@ config = {
     "pck_alpha": 0.5,
     "pck_multi": False,
     "sequence_step_size": 1, # Steps to be taken from one frame to another
+    "cropped": True # loads the bigger {animal}_cropped dataset
 }
 
 dtrain = AllAnimals_Sequence_Train(config)
@@ -25,28 +26,15 @@ def test_get_example():
     # for element in dataset: print(element["frames"]().shape)
     ex = dtrain.get_example(5)
 
-def test_fid_different():
+def test_fid_different_dtrain():
     print()
     for element in tqdm(dtrain):
         assert element["fid0"] != element["fid1"]
 
-# def test_train_test_split():
-#     filenames = []
-#     print()
-#     for element in tqdm(dtrain):
-#         filenames.append(element["framename0"])
-#         filenames.append(element["framename1"])
-#     print()
-#     in_train_set = 0
-#     for element in tqdm(dtest):
-#         if element["framename0"] in filenames:
-#             print(f"{element['framename0']} is in train set!")
-#             in_train_set += 1
-#         if element["framename1"] in filenames:
-#             print(f"{element['framename1']} is in train set!")
-#             in_train_set+=1
-#     print(in_train_set)
-#     assert in_train_set == 0
+def test_fid_different_dtest():
+    print()
+    for element in tqdm(dtest):
+        assert element["fid0"] != element["fid1"]
 
 def test_all_shapes():
     size = config["resize_to"]
