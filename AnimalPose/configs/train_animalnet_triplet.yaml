@@ -4,7 +4,7 @@ batch_size: 8 # 32 on quattro
 num_steps: 500000
 lr: 0.0001
 cuda: True  # False -> use GPU
-ckpt_freq: 2000
+ckpt_freq: 5000
 #Training methods
 # Encoder pretrained by torchvision
 pretrained: True
@@ -17,6 +17,7 @@ load_self_pretrained_decoder:
 resnet_type: 18 #18, 50, 101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
 encoder_2: True
+pose_half: True
 
 # True sets the encoder_1 variational
 variational:
@@ -41,7 +42,7 @@ losses:
 LossConstrained:
   eps: 0.07 # eps ist der maximal zulässige reconstruction loss
   mu: 0.5 # mu ist hyperparameter wie stark der loss angepasst wird
-  lambda_init: 10000
+  lambda_init: 1000000
 
 # logging
 integrations:

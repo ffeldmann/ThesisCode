@@ -8,3 +8,4 @@ from .cross_domain import CrossDomain
 from .disentanglement_monochrome import DisentangleMonochrome
 from .lord import Lord
 from .cyclevae import CycleVAE
+from .keypoint_predictors import ResNetBackbone

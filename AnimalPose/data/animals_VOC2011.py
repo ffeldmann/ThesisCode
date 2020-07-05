@@ -109,6 +109,13 @@ class AnimalVOC2011_Abstract(DatasetMixin):
             [10, 11],  # Withers - TailBase
         ]
 
+        if self.config.get("min_kps", 0) >= 0:
+            good_indices = []
+            for i, entry in enumerate(self.sc):
+                if len(entry.get("labels_").get("kps")[:, 0].nonzero()[0]) >= self.config.get("min_kps", 0):
+                    good_indices.append(i)
+            self.sc = SubDataset(self.sc, good_indices).data
+
         if mode != "all":
             # split_indices = np.arange(self.train) if mode == "train" else np.arange(self.train + 1, len(self.sc))
             dset_indices = np.arange(len(self.sc))

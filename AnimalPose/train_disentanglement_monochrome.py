@@ -24,6 +24,7 @@ class Iterator(TemplateIterator):
         self.device = "cuda" if self.cuda else "cpu"
         self.mseloss = torch.nn.MSELoss()
         self.L1loss = torch.nn.L1Loss()
+        self.sigmoid = torch.nn.Sigmoid()
         # vgg loss
         if self.config["losses"]["vgg"]:
             self.vggL1 = VGGLossWithL1(gpu_ids=[0],
@@ -89,14 +90,16 @@ class Iterator(TemplateIterator):
 
         # (batch_size, width, height, channel)
         # We half the batch, first half for pose and second for appearance
-        inputs = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
-        inputs_heatmaps = numpy2torch(kwargs["targets"]).to("cuda")
+        inputs = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")
+        #inputs_heatmaps = numpy2torch(kwargs["targets0"]).to("cuda")
         inputs0, inputs1 = torch.split(inputs, int(inputs.size(0) / 2), dim=0)
-        inputs_heatmaps0, inputs_heatmaps1 = torch.split(inputs_heatmaps, int(inputs_heatmaps.size(0) / 2), dim=0)
+        #inputs_heatmaps0, inputs_heatmaps1 = torch.split(inputs_heatmaps, int(inputs_heatmaps.size(0) / 2), dim=0)
 
         # Autoencoder (a)
         pred0, appearance0, pose0 = model(inputs0)  # appearance
         pred1, appearance1, pose1 = model(inputs1)  # pose
+        pred0 = self.sigmoid(pred0)
+        pred1 = self.sigmoid(pred1)
 
         autoencoder_loss = 0
         autoencoder_loss += self.criterion(inputs0, pred0) * 1  # Eq2
@@ -104,29 +107,32 @@ class Iterator(TemplateIterator):
 
         # (b) Mixed Reconstruction
         mixed_reconstruction = model(enc_appearance=appearance0, enc_pose=pose1, mixed_reconstruction=True)
+        mixed_reconstruction = self.sigmoid(mixed_reconstruction)
         # (c) cycle consistency
-        model.eval()
+        #model.eval()
         pose_recon, appearance_recon, latent_appearance_hat, latent_pose_hat = model(mixed_reconstruction,
                                                                                      enc_appearance=appearance1,
                                                                                      enc_pose=pose0,
                                                                                      cycle=True)
-        model.train()
+        pose_recon = self.sigmoid(pose_recon)
+        appearance_recon = self.sigmoid(appearance_recon)
+        #model.train()
 
         cycle_loss = 0
         cycle_loss += self.criterion(appearance_recon, inputs0) * 1  # Eq4
         cycle_loss += self.criterion(pose_recon, inputs1) * 1  # Eq4
 
-        latent_loss = 0
-        latent_loss += self.L1loss(latent_pose_hat, pose1)  # Eq 5
-        latent_loss += self.L1loss(latent_appearance_hat, appearance0)  # Eq5
+        #latent_loss = 0
+        #latent_loss += self.L1loss(latent_pose_hat, pose1)  # Eq 5
+        #latent_loss += self.L1loss(latent_appearance_hat, appearance0)  # Eq5
 
-        hm0 = model(inputs0, heatmap=True)  # Heatmaps
-        hm1 = model(inputs1, heatmap=True)
+        #hm0 = model(inputs0, heatmap=True)  # Heatmaps
+        #hm1 = model(inputs1, heatmap=True)
 
-        pose_predictions = torch.cat((hm0, hm1), dim=0)
-        pose_loss = 0
-        pose_loss += self.criterion(hm0, inputs_heatmaps0)  # Eq1
-        pose_loss += self.criterion(hm1, inputs_heatmaps1)  # Eq1
+        #pose_predictions = torch.cat((hm0, hm1), dim=0)
+        #pose_loss = 0
+        #pose_loss += self.criterion(hm0, inputs_heatmaps0)  # Eq1
+        #pose_loss += self.criterion(hm1, inputs_heatmaps1)  # Eq1
 
         def train_op():
             self.optimizer.zero_grad()
@@ -134,15 +140,15 @@ class Iterator(TemplateIterator):
             autoencoder_loss.backward(retain_graph=True)
             cycle_loss.backward(retain_graph=True)
             # Freeze pose encoder
-            for param in model.backbone.parameters():
-                param.requires_grad = False
+            #for param in model.backbone.parameters():
+            #    param.requires_grad = False
             self.optimizer.step()
-            self.optimizer.zero_grad()
+            #self.optimizer.zero_grad()
             # Release pose encoder
-            for param in model.backbone.parameters():
-                param.requires_grad = True
-            pose_loss.backward()
-            self.optimizer.step()
+            #for param in model.backbone.parameters():
+            #    param.requires_grad = True
+            #pose_loss.backward()
+            #self.optimizer.step()
 
             # freeze decoder
             # for param in model.head.parameters():
@@ -155,12 +161,12 @@ class Iterator(TemplateIterator):
         def log_op():
             from edflow.data.util import adjust_support
 
-            PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
-            if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
+            #PCK_THRESH = [0.01, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.25, 0.5]
+            #if self.config['pck_alpha'] not in PCK_THRESH: PCK_THRESH.append(self.config["pck_alpha"])
 
-            coords, _ = heatmaps_to_coords(pose_predictions.clone(), thresh=self.config["hm"]["thresh"])
-            pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
-                   PCK_THRESH}
+            #coords, _ = heatmaps_to_coords(pose_predictions.clone(), thresh=self.config["hm"]["thresh"])
+            #pck = {t: percentage_correct_keypoints(kwargs["kps"], coords, t, self.config["pck"]["type"]) for t in
+            #       PCK_THRESH}
 
             logs = {
                 "images": {
@@ -172,35 +178,28 @@ class Iterator(TemplateIterator):
                                                            "-1->1", "0->1"),
                     "cycle0": adjust_support(torch2numpy(pose_recon).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                     "cycle1": adjust_support(torch2numpy(appearance_recon).transpose(0, 2, 3, 1), "-1->1", "0->1"),
-                    "targets": adjust_support(heatmaps_to_image(kwargs["targets"]).transpose(0, 2, 3, 1), "-1->1"),
-                    "inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps"]),
-                    "stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), pose_predictions.clone(),
-                                                    thresh=self.config["hm"]["thresh"]),
-                    "pred_hm": adjust_support(heatmaps_to_image(torch2numpy(pose_predictions)).transpose(0, 2, 3, 1),
-                                              "-1->1", "0->1"),
+                    #"targets": adjust_support(heatmaps_to_image(kwargs["targets0"]).transpose(0, 2, 3, 1), "-1->1"),
+                    #"inputs_with_stick": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), kwargs["kps0"]),
+                    #"stickanimal": make_stickanimal(torch2numpy(inputs).transpose(0, 2, 3, 1), pose_predictions.clone(),
+                    #                                thresh=self.config["hm"]["thresh"]),
+                    #"pred_hm": adjust_support(heatmaps_to_image(torch2numpy(pose_predictions)).transpose(0, 2, 3, 1),
+                    #                          "-1->1", "0->1"),
                 },
                 "scalars": {
-                    "loss": autoencoder_loss + cycle_loss + pose_loss,
+                    "loss": autoencoder_loss + cycle_loss,# + pose_loss,
                     "loss_autoencoder": autoencoder_loss,
                     "recon_loss": cycle_loss,
-                    "pose_loss": pose_loss,
-                    f"PCK@{self.config['pck_alpha']}": np.around(pck[self.config['pck_alpha']][0], 5),
+                    #"pose_loss": pose_loss,
+                    #f"PCK@{self.config['pck_alpha']}": np.around(pck[self.config['pck_alpha']][0], 5),
                 },
-                "figures": {
-                    "Keypoint Mapping": plot_input_target_keypoints(torch2numpy(inputs).transpose(0, 2, 3, 1),
-                                                                    # get BHWC
-                                                                    torch2numpy(pose_predictions),  # stay BCHW
-                                                                    kwargs["kps"], coords),
-
-                }
             }
 
-            if self.config["pck"]["pck_multi"]:
-                for key, val in pck.items():
-                    # get mean value for pck at given threshold
-                    logs["scalars"][f"PCK@{key}"] = np.around(val[0], 5)
-                    for idx, part in enumerate(val[1]):
-                        logs["scalars"][f"PCK@{key}_{self.dataset.get_idx_parts(idx)}"] = np.around(part, 5)
+            # if self.config["pck"]["pck_multi"]:
+            #     for key, val in pck.items():
+            #         # get mean value for pck at given threshold
+            #         logs["scalars"][f"PCK@{key}"] = np.around(val[0], 5)
+            #         for idx, part in enumerate(val[1]):
+            #             logs["scalars"][f"PCK@{key}_{self.dataset.get_idx_parts(idx)}"] = np.around(part, 5)
 
             # gridded_outputs = np.expand_dims(sure_to_numpy(torchvision.utils.make_grid(
             #    predictions[0], nrow=10)), 0).transpose(1, 2, 3, 0)

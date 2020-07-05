@@ -139,12 +139,52 @@ class Decoder(nn.Module):
         x = self.deconv_model(x)
 
         return x
-from AnimalPose.models.keypoint_predictors import ResNetBackbone, DeconvHead
+from AnimalPose.models.keypoint_predictors import ResPoseNet
 class CycleVAE(nn.Module):
-    def __init__(self):
-        super(CycleVAE, self).__init__()
-        self.backbone = ResNetBackbone()
-        self.head = DeconvHead()
+    def __init__(self, config):
+        super(ResPoseNet, self).__init__()
+        # Loading weight etc done in ResPosenet here we add the style embeddings and class embeddings
+
+        self.style_dim = self.config["style_dim"] # TODO
+        self.class_dim = self.config["class_dim"]
+
+        #BACKBONE
+
+        # Style embeddings
+        self.backbone_style_mu = nn.Linear(in_features=256, out_features=self.style_dim, bias=True)
+        self.backbone_style_logvar = nn.Linear(in_features=256, out_features=self.style_dim, bias=True)
+
+        # Class embeddings
+        self.backbone_class_output = nn.Linear(in_features=256, out_features=self.class_dim, bias=True)
+
+
+        # HEAD
+        # Style embeddings input
+        self.head_style_input = nn.Linear(in_features=self.style_dim, out_features=256, bias=True)
+
+        # Class embeddings input
+        self.head_class_input = nn.Linear(in_features=self.class_dim, out_features=256, bias=True)
+
+
+    def forward(self, x):
+        #HEAD
+        x = self.conv_model(x)
+        x = x.view(x.size(0), x.size(1) * x.size(2) * x.size(3))
+
+        style_embeddings_mu = self.style_mu(x)
+        style_embeddings_logvar = self.style_logvar(x)
+        class_embeddings = self.class_output(x)
+
+        return style_embeddings_mu, style_embeddings_logvar, class_embeddings
+        style_latent_space = reparameterize(training=True, mu=mu, logvar=logvar)
+        # HEAD
+        style_embeddings = F.leaky_relu_(self.style_input(style_embeddings), negative_slope=0.2)
+        class_embeddings = F.leaky_relu_(self.class_input(class_embeddings), negative_slope=0.2)
+
+        x = torch.cat((style_embeddings, class_embeddings), dim=1)
+        x = x.view(x.size(0), 128, 2, 2)
+        x = self.head(x)
+        return
 
 
 class Classifier(nn.Module):

@@ -6,7 +6,7 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.utils.loss_utils import VGGLossWithL1
+from AnimalPose.utils.log_utils import hog_similarity, hist_similarity, generate_samples
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 from AnimalPose.utils.LossConstrained import LossConstrained
@@ -44,13 +44,6 @@ class Iterator(TemplateIterator):
             print("Some infos not found")
         self.loss_constrained = LossConstrained(self.config)
         self.sigmoid = torch.nn.Sigmoid()
-        # vgg loss
-        # if self.config["losses"]["vgg"]:
-        #     self.vggL1 = VGGLossWithL1(gpu_ids=[0],
-        #                                l1_alpha=self.config["losses"]["vgg_l1_alpha"],
-        #                                vgg_alpha=self.config["losses"]["vgg_alpha"]).to(self.device)
-        # if self.config["losses"]["KL"]:
-        #     self.klloss = torch.nn.KLDivLoss(reduction="batchmean")
         # # initalize perceptual loss if possible
         if self.config["losses"]["perceptual"]:
             net = self.config["losses"]["perceptual_network"]
@@ -104,20 +97,6 @@ class Iterator(TemplateIterator):
         # set model to train / eval mode
         is_train = self.get_split() == "train"
         model.train(is_train)
-        # if self.get_global_step() >= self.start_step and is_train:
-        #     if self.variational:
-        #         # self.logger.info(f"Global step: {self.get_global_step()}")
-        #         self.logger.info(f"Global step: {self.get_global_step()}")
-        #         prev = self.kl_weight
-        #         if self.config["variational"]["decay"]:
-        #             self.kl_weight = self.kl_weight * 0.99
-        #             self.logger.info(f"Decay prev kl_weight {prev} to {self.kl_weight}.")
-        #         else:  # start_step, stop_step, start_weight, stop_weight
-        #             relative_global_step = self.get_global_step() - self.start_step
-        #             self.kl_weight = self.start_weight + ((self.stop_weight - self.start_weight) * (
-        #                     relative_global_step / (self.stop_step - self.start_step)))  # * 1.001
-        #             self.logger.info(f"Increase prev kl_weight {prev} to {self.kl_weight}.")
-
         # (batch_size, width, height, channel)
         inputs0 = numpy2torch(kwargs["inp0"].transpose(0, 3, 1, 2)).to("cuda")
         if self.encoder_2:
@@ -130,22 +109,24 @@ class Iterator(TemplateIterator):
             if self.variational:
                 predictions, mu, logvar = model(inputs0, inputs1)
                 # Do only in test
-                with torch.no_grad():
-                    inputs1_flipped = torch.flip(inputs1, [0])  # flip the tensor in zero dimension
-                    kl_test_preds, _, _ = model(inputs0, inputs1_flipped)
-                    kl_test_preds = self.sigmoid(kl_test_preds)
-                    if retrieve(self.config, "classifier/active", default=False):
-                        class_prediction = self.classifier(kl_test_preds)
-                        _, preds = torch.max(class_prediction, 1)
-                        # as inputs1 is flipped, the labels need also to be flipped
-                        labels = torch.flip(torch.from_numpy(kwargs["global_video_class1"]).to("cuda"), [0])
-                        # Compute accuracy for batch
-                        corrects = torch.sum(preds == labels.data)
-                        accuracy = corrects.double() / self.config["batch_size"]
-
-                    # output[f"global_video_class{i}"]
             else:
                 predictions = model(inputs0, inputs1)
+
+            with torch.no_grad():
+                inputs1_flipped = torch.flip(inputs1, [0])  # flip the tensor in zero dimension
+                if self.variational:
+                    kl_test_preds, _, _ = model(inputs0, inputs1_flipped)
+                else:
+                    kl_test_preds = model(inputs0, inputs1_flipped)
+                kl_test_preds = self.sigmoid(kl_test_preds)
+                if retrieve(self.config, "classifier/active", default=False):
+                    class_prediction = self.classifier(kl_test_preds)
+                    _, preds = torch.max(class_prediction, 1)
+                    # as inputs1 is flipped, the labels need also to be flipped
+                    labels = torch.flip(torch.from_numpy(kwargs["global_video_class1"]).to("cuda"), [0])
+                    # Compute accuracy for batch
+                    corrects = torch.sum(preds == labels.data)
+                    accuracy = corrects.double() / self.config["batch_size"]
         else:
             if self.variational:
                 predictions, mu, logvar = model(inputs0)
@@ -154,7 +135,8 @@ class Iterator(TemplateIterator):
         predictions = self.sigmoid(predictions)  # in order to make the output in range between 0 and 1
         # compute loss
         # Target heatmaps, predicted heatmaps, gt_coords
-        if self.get_global_step() >= self.config["LossConstrained"]["no_kl_for"]:
+        if self.get_global_step() >= self.config["LossConstrained"]["no_kl_for"] and \
+                self.config["LossConstrained"]["active"]:
             loss, log, loss_train_op = self.loss_constrained(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu,
                                                              logvar,
                                                              self.get_global_step())
@@ -163,13 +145,13 @@ class Iterator(TemplateIterator):
         else:
             loss = torch.mean(self.perceptual_loss(inputs0, predictions, True))
 
-        # if self.variational:
-        #     if self.encoder_2:
-        #         losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
-        #     else:
-        #         losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions, mu, logvar)
-        # else:
-        #     losses = self.criterion(kwargs["inp0"].transpose(0, 3, 1, 2), predictions)
+        hist_values = []
+        hog_values = []
+        for idx in range(predictions.size(0)):
+            hist_values.append(hist_similarity(kl_test_preds[idx].cpu().numpy().transpose(1, 2, 0),
+                                               inputs1_flipped[idx].cpu().numpy().transpose(1, 2, 0)))
+            hog_values.append(hog_similarity(inputs0[idx].cpu().numpy().transpose(1, 2, 0),
+                                             kl_test_preds[0].cpu().numpy().transpose(1, 2, 0))[0])
 
         def train_op():
             self.optimizer.zero_grad()
@@ -177,17 +159,20 @@ class Iterator(TemplateIterator):
             self.optimizer.step()
 
         def log_op():
-            is_train = self.get_split() == "train"
             logs = {
                 "images": {
                     "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                    "disentanglement": adjust_support(np.expand_dims(generate_samples(inputs0, model),0), "-1->1", "0->1"),
                     "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                 },
                 "scalars": {
                     "loss": loss,
                 },
             }
-            if self.get_global_step() >= self.config["LossConstrained"]["no_kl_for"]:
+            logs["images"]["image_input_1_flipped"] = adjust_support(
+                torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
+            if self.get_global_step() >= self.config["LossConstrained"]["no_kl_for"] and \
+                    self.config["LossConstrained"]["active"]:
                 logs["scalars"]["lambda_"] = log["scalars"]["lambda_"]
                 logs["scalars"]["gain"] = log["scalars"]["gain"]
                 logs["scalars"]["active"] = log["scalars"]["active"]
@@ -200,23 +185,18 @@ class Iterator(TemplateIterator):
             if self.encoder_2:
                 logs["images"]["image_input_1"] = adjust_support(torch2numpy(inputs1).transpose(0, 2, 3, 1), "-1->1",
                                                                  "0->1")
-                if self.variational:
-                    logs["images"]["image_input_1_flipped"] = adjust_support(
-                        torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
-                    logs["images"]["pose_reconstruction"] = adjust_support(
-                        torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1")
-                    if retrieve(self.config, "classifier/active", default=False):
-                        logs["scalars"]["accuracy"] = accuracy
-            # if self.kl_weight:
-            #     logs["scalars"]["kl_weight"] = self.kl_weight
-            # if self.config["losses"]["L2"]:
-            #     logs["scalars"]["L2_loss"] = losses["L2_loss"]
-            # if self.config["losses"]["perceptual"]:
-            #     logs["scalars"]["perceptual"] = losses["perceptual"]
-            # if self.config["losses"]["KL"] and self.variational:
-            #     logs["scalars"]["KL"] = losses["KL"]
-            # if self.config["losses"]["vgg"]:
-            #     logs["scalars"]["vgg"] = losses["vgg"]
+                logs["images"]["image_input_1_flipped"] = adjust_support(
+                    torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1")
+                logs["images"]["pose_reconstruction"] = adjust_support(
+                    torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1")
+                if retrieve(self.config, "classifier/active", default=False):
+                    logs["scalars"]["accuracy"] = accuracy
+            if self.encoder_2:
+                logs["scalars"]["hog"] = np.array(hog_values).mean()
+                logs["scalars"]["hog_std"] = np.array(hog_values).std()
+                logs["scalars"]["hist"] = np.array(hist_values).mean()
+                logs["scalars"]["hist_std"] = np.array(hist_values).std()
+
             return logs
 
         def eval_op():
@@ -263,9 +243,13 @@ class TripletIterator(Iterator):
         # compute perceptual loss reconstruction
         # loss(predictions, inp1) where inp2 is p1a1
         # Testing:
+        # inp0 -> p0a0 (a)
+        # inp1 -> p0a1 (b)
+        # inp2 -> p1a0 (c)
+        # inp3 -> p1a1 (d)
         with torch.no_grad():
-            inputs3 = numpy2torch(kwargs["inp3"].transpose(0, 3, 1, 2)).to("cuda")  # p0a0
-            inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")  # p0a0
+            inputs3 = numpy2torch(kwargs["inp3"].transpose(0, 3, 1, 2)).to("cuda")  # p1a1
+            inputs1 = numpy2torch(kwargs["inp1"].transpose(0, 3, 1, 2)).to("cuda")  # p0a1
             testing, _, _ = model(inputs0, inputs3)
             testing = self.sigmoid(testing)
             loss_dis = torch.mean(self.perceptual_loss(testing, inputs1))

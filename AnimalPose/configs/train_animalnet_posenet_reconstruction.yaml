@@ -1,10 +1,10 @@
 iterator: AnimalPose.train_animalnet.ReconstructionIterator
 model: AnimalPose.models.AnimalPosenet
-batch_size: 8 # 32 on quattro
-num_steps: 160000
+batch_size: 16 # 32 on quattro
+num_steps: 1000001
 lr: 0.0001
 cuda: True  # False -> use GPU
-ckpt_freq: 2000
+ckpt_freq: 5000
 #Training methods
 # Encoder pretrained by torchvision
 pretrained: True
@@ -16,20 +16,27 @@ load_self_pretrained_decoder:
   path: "load_weights/PosNet18.ckpt"
 resnet_type: 18 #18, 50, 101,152
 encoder_latent_dim: 256 # decoder latent dim is automatically set by encoder_latent_dim * (2 if encoder_2 else 1)
-encoder_2: False
+pose_half: True # Sets the enoder latent dim for pose to half the size
+encoder_2: True
+
+classifier_resnet_type: 18
+classifier:
+  active: True
+  weights: "../thisisatest/logs/2020-05-22T16-19-10_CL1_R18_cropped_AUGMENTED/train/checkpoints/model-12000.ckpt"
+  #weights: "load_weights/classifier_534.ckpt"
 
 # True sets the encoder_1 variational
 variational:
-  active: False
-  start_step: 5000
-  stop_weight: 1
+  active: True
+  #start_step: 5000
+  #stop_weight: 1
   kl_weight: 0.000001 # 0.00016 #1 #0.000001
-  decay: False
+  #decay: False
 
 # Losses
 losses:
   L2: False
-  KL: False
+  KL: True
   perceptual: True
   perceptual_network: "vgg" # alex, squeeze or vgg
   perceptual_weight: 5.0
@@ -39,9 +46,11 @@ losses:
   vgg_alpha: 1.0
 
 LossConstrained:
-  eps: 0.4 # eps ist der maximal zulässige reconstruction loss
-  mu: 0.1 # mu ist hyperparameter wie stark der loss angepasst wird
-  lambda_init: 1000000
+  active: True
+  no_kl_for: 0
+  eps: 0.3 # eps ist der maximal zulässige reconstruction loss
+  mu: 1 # mu ist hyperparameter wie stark der loss angepasst wird
+  lambda_init: 100000
 
 # logging
 integrations:

@@ -196,7 +196,7 @@ class ResPoseNet(nn.Module):
         num_deconv_kernel = 4
         final_conv_kernel = 1
         depth_dim = 1
-
+        self.config = config
         "resnet" + str(config.get("resnet_type", "50"))
         block_type, layers, channels, name = resnet_spec[int(config.get("resnet_type", "50"))]
         self.logger = get_logger(self)
@@ -225,7 +225,8 @@ class ResPoseNet(nn.Module):
                         new_state_dict[name] = v
                 new_state_dict.pop("layer4.fc.1.weight", None)
                 new_state_dict.pop("layer4.fc.1.bias", None)
-            except KeyError:
+            except KeyError as e:
+                print(f"Keyerror: {e}, trying different.")
                 state_dict = torch.load(path, map_location="cuda")
                 new_state_dict = {}
                 for k, v in state_dict.items():
@@ -251,7 +252,38 @@ class ResPoseNet(nn.Module):
             new_state_dict["features.20.bias"] = self.head.features[20].bias
             self.head.load_state_dict(new_state_dict, strict=True)
 
+        if config["regression"]:
+            self.fc1 = nn.Linear(8192, 4096)
+            self.drop1 = nn.Dropout(p=0.1)
+            self.fc2 = nn.Linear(4096, 2048)
+            self.drop2 = nn.Dropout(p=0.2)
+            self.fc3 = nn.Linear(2048, 1024)
+            self.drop3 = nn.Dropout(p=0.3)
+            self.fc4 = nn.Linear(1024, 512)
+            self.drop4 = nn.Dropout(p=0.4)
+            self.fc5 = nn.Linear(512, 256)
+            self.drop5 = nn.Dropout(p=0.5)
+            self.fc6 = nn.Linear(256, 128)
+            self.drop6 = nn.Dropout(p=0.6)
+            self.fc7 = nn.Linear(128, self.config["n_classes"]*2)
+
     def forward(self, x):
         x = self.backbone(x)
+        if self.config["regression"]:
+            x = x.reshape(x.size(0), -1)
+            x = self.fc1(x)
+            x = self.drop2(x)
+            x = self.fc2(x)
+            x = self.drop2(x)
+            x = self.fc3(x)
+            x = self.drop2(x)
+            x = self.fc4(x)
+            x = self.drop2(x)
+            x = self.fc5(x)
+            x = self.drop2(x)
+            x = self.fc6(x)
+            x = self.drop2(x)
+
+            return self.fc7(x)
         x = self.head(x)
         return x

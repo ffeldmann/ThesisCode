@@ -1,7 +1,10 @@
 import imgaug.augmenters as iaa
 import numpy as np
+import os
 import skimage.color
+import skimage.io
 import sklearn.model_selection
+import random
 from edflow.data.agnostics.subdataset import SubDataset
 from edflow.data.believers.meta import MetaDataset
 from edflow.data.believers.sequence import SequenceDataset
@@ -54,7 +57,7 @@ class Animal_Sequence(MetaDataset):
         self.crop = crop
 
 
-class Animal_Sequence_AbstractOLD(DatasetMixin):
+class Animal_Sequence_Abstract(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
@@ -70,7 +73,8 @@ class Animal_Sequence_AbstractOLD(DatasetMixin):
         self.sigma = config["sigma"]
         self.augmentation = config["augmentation"]
         self.aug_factor = 0.5
-
+        self.color_appearance_images = [os.path.join("animals/texture_images", f) for f in
+                                        os.listdir("animals/texture_images") if f.endswith(".jpg")]
         self.logger = get_logger(self)
 
         self.resize = iaa.Resize(self.config["resize_to"])
@@ -80,7 +84,7 @@ class Animal_Sequence_AbstractOLD(DatasetMixin):
             # iaa.Sometimes(self.aug_factor, iaa.SaltAndPepper(0.01, per_channel=False)),
             # iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
             iaa.Sometimes(self.aug_factor, iaa.Fliplr()),
-            iaa.Sometimes(self.aug_factor, iaa.Flipud()),
+            # iaa.Sometimes(self.aug_factor, iaa.Flipud()),
             # iaa.Sometimes(self.aug_factor, iaa.GaussianBlur(sigma=(0, 3.0))),
             # iaa.LinearContrast((0.75, 1.5)),
             # Convert each image to grayscale and then overlay the
@@ -160,6 +164,8 @@ class Animal_Sequence_AbstractOLD(DatasetMixin):
         example = super().get_example(idx)
         output = dict()
         sample_idxs = np.random.choice(np.arange(0, self.sequence_length), 2, replace=False)
+        texture_image = self.resize(image=skimage.io.imread(random.choice(self.color_appearance_images)))
+        output["appearance_texture"] = adjust_support(texture_image, "0->1", "0->255")
         for i, ex_idx in enumerate(sample_idxs):
             if self.config.get("image_type", "") == "mask":
                 image = example["masked_frames"][ex_idx]()
@@ -226,7 +232,7 @@ class Animal_Sequence_AbstractOLD(DatasetMixin):
         return output
 
 
-class Animal_Sequence_Abstract(DatasetMixin):
+class Animal_Sequence_AbstractAppearance(DatasetMixin):
     def __init__(self, config, mode="all"):
         assert mode in ["train", "validation", "all"], f"Should be train, validation or all, got {mode}"
         self.config = config
@@ -241,17 +247,18 @@ class Animal_Sequence_Abstract(DatasetMixin):
         self.test = 1 - self.train
         self.sigma = config["sigma"]
         self.augmentation = config["augmentation"]
-        self.aug_factor = 0.5
 
+        self.color_appearance_images = [os.path.join("animals/texture_images", f) for f in
+                                        os.listdir("animals/texture_images") if f.endswith(".jpg")]
         self.logger = get_logger(self)
 
         self.resize = iaa.Resize(self.config["resize_to"])
-
+        self.aug_factor = 0.5
         self.seq = iaa.Sequential([
             # iaa.Sometimes(self.aug_factor, iaa.AdditiveGaussianNoise(scale=0.05 * 255)),
             # iaa.Sometimes(self.aug_factor, iaa.SaltAndPepper(0.01, per_channel=False)),
             # iaa.Sometimes(self.aug_factor, iaa.CoarseDropout(0.01, size_percent=0.5)),
-            iaa.Sometimes(self.aug_factor, iaa.Fliplr()),
+            iaa.Sometimes(self.aug_factor + 0.2, iaa.Fliplr()),
             iaa.Sometimes(self.aug_factor, iaa.Flipud()),
             # iaa.Sometimes(self.aug_factor, iaa.GaussianBlur(sigma=(0, 3.0))),
             # iaa.LinearContrast((0.75, 1.5)),
@@ -337,6 +344,8 @@ class Animal_Sequence_Abstract(DatasetMixin):
         """
         example = super().get_example(idx)
         output = dict()
+        texture_image = self.resize(image=skimage.io.imread(random.choice(self.color_appearance_images)))
+        output["appearance_texture"] = adjust_support(texture_image, "0->1", "0->255")
         output["global_video_class0"] = example["labels_"]["global_video_class"]
         output["fid0"] = example["labels_"]["fid"]
 
@@ -349,6 +358,8 @@ class Animal_Sequence_Abstract(DatasetMixin):
         output["fid1"] = appearance_example["labels_"]["fid"]
 
         for i, ex in enumerate([example, appearance_example]):
+            if self.config.get("autoencoder", False):
+                ex = example
             if self.config.get("image_type", "") == "mask":
                 image = ex["masked_frames"]()
                 output[f"framename{i}"] = ex["labels_"]["masked_frames_"]

@@ -78,6 +78,7 @@ def percentage_correct_keypoints(keypoints: np.array,
     num_pts = torch.zeros(batch_size)
     num_joints = torch.zeros((batch_size, keypoints.size(1)))
     correct_index = -torch.ones((batch_size, len(keypoints[0])))
+    l2distance = torch.zeros((batch_size, len(keypoints[0])))
     for idx in range(batch_size):
         # computes pck for all keypoint pairs of once instance
         p_src = keypoints[idx, :]
@@ -105,22 +106,29 @@ def percentage_correct_keypoints(keypoints: np.array,
         p_pred[~mask, :] = 0
         num_pts[idx] = N_pts
         point_distance = torch.pow(torch.sum(torch.pow(p_src - p_pred, 2), 1), 0.5)  # 0.5 means squared!!
+        point_distance[~mask] = 0
+        l2distance[idx, :] = point_distance.view(-1)
         L_pck_mat = l_pck.expand_as(point_distance)  # val -> val, val
         correct_points = torch.le(point_distance, L_pck_mat * thresh).type(torch.uint8)
 
         correct_points[~mask] = 0
+
         # C_pts = torch.sum(correct_points)
         correct_index[idx, :] = correct_points.view(-1)
         # PCK for the image is divided by the number of valid points in GT
+        # correct_not_found = sum(p_pred[~mask][:,0] == 0)
         pck[idx] = torch.sum(correct_points.float()) / torch.clamp(N_pts.float(), min=1e-6)
         assert pck[idx] >= 0
 
     # Reduce to joint granularity
     correct_per_joint = torch.sum(correct_index, dim=0)
     sum_available_joint = torch.sum(num_joints, dim=0)
+    l2_average = torch.sum(l2distance) / torch.sum(num_joints)
+    l2_average_joint = torch.sum(l2distance, dim=0) / torch.clamp(sum_available_joint, min=1e-6)
     # clamp the tensor, sometimes we have zero available joints and then we have NaN values
     pck_joints = correct_per_joint / torch.clamp(sum_available_joint, min=1e-6)
-    return pck.mean().numpy(), pck_joints.numpy()
+    pck_average = torch.sum(correct_index) / torch.sum(num_joints)
+    return pck_average.numpy(), pck_joints.numpy(), l2_average.detach().numpy(), l2_average_joint.detach().numpy()
 
 
 class VGG19(torch.nn.Module):

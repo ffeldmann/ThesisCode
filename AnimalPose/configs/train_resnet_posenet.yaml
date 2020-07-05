@@ -1,26 +1,42 @@
 iterator: AnimalPose.train_keypoint_predictor.Iterator
+#iterator: AnimalPose.train_keypoint_predictor.IteratorRegression
 model: AnimalPose.models.ResPoseNet
 batch_size: 16
-num_steps: 60001
+num_steps: 32001
 lr: 0.0001
 cuda: true  # False -> use GPU
 ckpt_freq: 30000
 #Training methods
-pretrained: True
+pretrained: False # imagenet pretraining
 resnet_type: 18 #50,101,152
 adjust_learning_rate: False
 # Pretraining!
 load_self_pretrained_encoder:
   active: True
+  path: "../animal_disentanglement/logs/2020-07-03T15-18-29_DISNOIMAGENETPRETRAINING/train/checkpoints/model-170000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-07-04T22-31-06_Autoencoder/train/checkpoints/model-40000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-19T11-36-01_SyntehticTriplet100k/train/checkpoints/model-40000.ckpt"
   #path: "logs/2020-05-20T15-16-53_BL_Triplet_EPS0.07MU0.5_10k/train/checkpoints/model-334000.ckpt"
-  path: "logs/2020-05-17T23-07-10_TripletwithreconlossEPS0.4MU0.5lambda100k/train/checkpoints/model-394000.ckpt"
+  #path: "../thisisatest/logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-80000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-15T15-57-45_DIS10kMU0.5EPS0.3_POSE_SMALLERlambda1mio_RANDOMAPPEARANCE/train/checkpoints/model-100000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-19T11-36-39_SyntehticTriplet1mio/train/checkpoints/model-100000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-26T20-19-16_Monochrome_REAL_AUGMENTED/train/checkpoints/model-85000.ckpt"
+  #path: "../animal_keypoints/logs/2020-06-20T16-01-49_KP_HM_BL/train/checkpoints/model-60000.ckpt" # basline model trained
 load_self_pretrained_decoder:
   active: False
+  path: "../animal_disentanglement/logs/2020-07-03T15-18-29_DISNOIMAGENETPRETRAINING/train/checkpoints/model-170000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-19T11-36-01_SyntehticTriplet100k/train/checkpoints/model-40000.ckpt"
   #path: "logs/2020-05-20T15-16-53_BL_Triplet_EPS0.07MU0.5_10k/train/checkpoints/model-334000.ckpt"
-  path: "logs/2020-05-17T23-07-10_TripletwithreconlossEPS0.4MU0.5lambda100k/train/checkpoints/model-394000.ckpt"
-# Encoder is frozen by default
-freeze_encoder_for: 999999999 #steps helps to train the decoder in first place
+  #path: "../thisisatest/logs/2020-05-12T13-05-49_LosscontrainedLAMBDAINIT1mioREAL/train/checkpoints/model-80000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-15T15-57-45_DIS10kMU0.5EPS0.3_POSE_SMALLERlambda1mio_RANDOMAPPEARANCE/train/checkpoints/model-100000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-19T11-36-39_SyntehticTriplet1mio/train/checkpoints/model-100000.ckpt"
+  #path: "../animal_disentanglement/logs/2020-06-26T20-19-16_Monochrome_REAL_AUGMENTED/train/checkpoints/model-85000.ckpt"
+  #path: "../animal_keypoints/logs/2020-06-20T16-01-49_KP_HM_BL/train/checkpoints/model-60000.ckpt" # baseline model trained
 
+
+# Encoder is frozen by default
+freeze_encoder_for: 0 #steps helps to train the decoder in first place
+regression: False
 
 #### BELOW THIS ALL CONFIGS ARE FORE KEYPOINT PREDICTORS THE SAME!
 # Heatmap
@@ -37,7 +53,7 @@ losses:
   L1: False
   L2: True
   KL: False
-  perceptual: True
+  perceptual: False
   perceptual_network: "vgg" # alex, squeeze or vgg
   perceptual_weight: 1.0
   #VGGL1Loss

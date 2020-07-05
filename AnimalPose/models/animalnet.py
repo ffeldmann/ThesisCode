@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from AnimalPose.models import ResPoseNet
-
+import copy
 
 class Flatten(nn.Module):
     def forward(self, input):
@@ -55,26 +55,46 @@ class AnimalPosenet(ResPoseNet):
                 Flatten(),
                 nn.Linear(512 * 4 * 4, config["encoder_latent_dim"])
             ))
+            if config["encoder_2"]:
+                self.backbone2 = copy.deepcopy(self.backbone)
+            if config["pose_half"]:
+                self.backbone.layer4.add_module("fc", nn.Sequential(
+                    Flatten(),
+                    nn.Linear(512 * 4 * 4, int(config["encoder_latent_dim"] / 2))
+                ))
         else:
             self.backbone.layer4.add_module("fc", nn.Sequential(
                 Flatten(),
                 nn.Linear(2048 * 4 * 4, config["encoder_latent_dim"])
-            )
-                                            )
+            ))
+            if config["encoder_2"]:
+                self.backbone2 = copy.deepcopy(self.backbone)
+            if config["pose_half"]:
+                self.backbone.layer4.add_module("fc", nn.Sequential(
+                    Flatten(),
+                    nn.Linear(2048 * 4 * 4, int(config["encoder_latent_dim"] / 2))
+                ))
 
-        if config["encoder_2"]:
-            self.backbone2 = self.backbone
         if config["resnet_type"] <= 38:
             # for resnet type 18, 38
             self.fc = nn.Linear(
                 config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 512 * 4 * 4)
+            if config["pose_half"]:
+                self.fc = nn.Linear(
+                    int(config["encoder_latent_dim"] + config["encoder_latent_dim"] / 2), 512 * 4 * 4)
         else:
             # For resnet type 50, 101, 152
             self.fc = nn.Linear(
                 config["encoder_latent_dim"] * 2 if config["encoder_2"] else config["encoder_latent_dim"], 2048 * 4 * 4)
+            if config["pose_half"]:
+                self.fc = nn.Linear(
+                    int(config["encoder_latent_dim"] / 2), 2048 * 4 * 4)
         if self.variational:
             self.fcmu = nn.Linear(config["encoder_latent_dim"], config["encoder_latent_dim"])
             self.fcvar = nn.Linear(config["encoder_latent_dim"], config["encoder_latent_dim"])
+            if config["pose_half"]:
+                self.fcmu = nn.Linear(int(config["encoder_latent_dim"] / 2), int(config["encoder_latent_dim"] / 2))
+                self.fcvar = nn.Linear(int(config["encoder_latent_dim"] / 2), int(config["encoder_latent_dim"] / 2))
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)

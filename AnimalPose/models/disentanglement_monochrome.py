@@ -94,9 +94,16 @@ class DisentangleMonochrome(ResPoseNet):
 
         appearance = self.backbone2(input)
         if input2 != None:
-            pose = self.backbone(input)
+            pose = self.backbone(input2)
         else:
             pose = self.backbone(input)
+
+        if input2 != None and mixed_reconstruction:
+            # mix reconstruction (b)
+            latent = torch.cat((appearance, pose), dim=1)
+            latent = self.fc(latent).view(latent.size(0), -1, 4, 4)
+            return self.head(latent)
+
 
         if enc_appearance != None and enc_pose != None and cycle:
             # cycle consistency (c)

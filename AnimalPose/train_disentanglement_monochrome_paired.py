@@ -36,14 +36,6 @@ class Iterator(TemplateIterator):
                 self.device)
         if self.cuda:
             self.model.cuda()
-        # hooks
-        # if "pretrained_checkpoint" in self.config.keys():
-        #     self.hooks.append(
-        #         RestorePretrainedSDCHook(
-        #             pretrained_checkpoint=self.config["pretrained_checkpoint"],
-        #             model=self.model,
-        #         )
-        #     )
 
     def save(self, checkpoint_path):
         state = {

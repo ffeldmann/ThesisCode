@@ -1,4 +1,4 @@
-dataset: AnimalPose.data.AllAnimals_Sequence_Validation
+dataset: AnimalPose.data.AllAnimals_Sequence_Train
 validation_dataset: AnimalPose.data.AllAnimals_Sequence_Validation
 animals: ["horse"] # ["horse", "domestic_sheep"]#, "horse", "hellenic_hound", "tiger"]
 synthetic: True # Placeholder, just important for the dataloader

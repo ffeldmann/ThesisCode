@@ -17,6 +17,21 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import models
 from tqdm import tqdm
+from .keypoint_predictors import ResNetBackbone, resnet_spec
+
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.reshape(input.size(0), -1)
+
+
+class UnFlatten(nn.Module):
+    def __init__(self, dim1, dim2):
+        super(UnFlatten, self).__init__()
+        self.dim1 = dim1
+        self.dim1 = dim2
+
+    def forward(self, input):
+        return input.reshape(input.size(0), -1, self.dim1, self.dim2)
 
 
 class LatentModel(nn.Module):
@@ -60,8 +75,8 @@ class AmortizedModel(nn.Module):
 
         self.config = config
 
-        self.content_encoder = Encoder(config['img_shape'], config['content_dim'])
-        self.class_encoder = Encoder(config['img_shape'], config['class_dim'])
+        self.content_encoder = Encoder(config, config['img_shape'], config['content_dim'])
+        self.class_encoder = Encoder(config, config['img_shape'], config['class_dim'])
         self.modulation = Modulation(config['class_dim'], config['n_adain_layers'], config['adain_dim'])
         self.generator = Generator(config['content_dim'], config['n_adain_layers'], config['adain_dim'],
                                    config['img_shape'])
@@ -189,47 +204,68 @@ class Generator(nn.Module):
 
         return x
 
-
 class Encoder(nn.Module):
+    def __init__(self, config, img_shape, code_dim):
+        block_type, layers, channels, name = resnet_spec[int(config.get("resnet_type", "50"))]
+        self.logger = get_logger(self)
+        self.backbone = ResNetBackbone(block_type, layers)
 
-    def __init__(self, img_shape, code_dim):
-        super().__init__()
-
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(in_channels=img_shape[-1], out_channels=64, kernel_size=7, stride=1, padding=3),
-            nn.LeakyReLU(),
-
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(),
-
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(),
-
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(),
-
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU()
-        )
-
-        self.fc_layers = nn.Sequential(
-            nn.Linear(in_features=4096, out_features=256),
-            nn.LeakyReLU(),
-
-            nn.Linear(in_features=256, out_features=256),
-            nn.LeakyReLU(),
-
-            nn.Linear(256, code_dim)
-        )
+        # resnet 18 / 34 need different input resnet 50/101/152 : 2048
+        if config["resnet_type"] <= 38:
+            self.backbone.layer4.add_module("fc", nn.Sequential(
+                Flatten(),
+                nn.Linear(512 * 4 * 4, code_dim)
+            ))
+        else:
+            self.backbone.layer4.add_module("fc", nn.Sequential(
+                Flatten(),
+                nn.Linear(2048 * 4 * 4, code_dim)))
 
     def forward(self, x):
-        batch_size = x.shape[0]
+        return self.backbone(x)
 
-        x = self.conv_layers(x)
-        x = x.view((batch_size, -1))
 
-        x = self.fc_layers(x)
-        return x
+
+# class Encoder(nn.Module):
+#
+#     def __init__(self, img_shape, code_dim):
+#         super().__init__()
+#
+#         self.conv_layers = nn.Sequential(
+#             nn.Conv2d(in_channels=img_shape[-1], out_channels=64, kernel_size=7, stride=1, padding=3),
+#             nn.LeakyReLU(),
+#
+#             nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
+#             nn.LeakyReLU(),
+#
+#             nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
+#             nn.LeakyReLU(),
+#
+#             nn.Conv2d(in_channels=256, out_channels=256, kernel_size=4, stride=2, padding=1),
+#             nn.LeakyReLU(),
+#
+#             nn.Conv2d(in_channels=256, out_channels=256, kernel_size=4, stride=2, padding=1),
+#             nn.LeakyReLU()
+#         )
+#
+#         self.fc_layers = nn.Sequential(
+#             nn.Linear(in_features=4096, out_features=256),
+#             nn.LeakyReLU(),
+#
+#             nn.Linear(in_features=256, out_features=256),
+#             nn.LeakyReLU(),
+#
+#             nn.Linear(256, code_dim)
+#         )
+#
+#     def forward(self, x):
+#         batch_size = x.shape[0]
+#
+#         x = self.conv_layers(x)
+#         x = x.view((batch_size, -1))
+#
+#         x = self.fc_layers(x)
+#         return x
 
 
 class AdaptiveInstanceNorm2d(nn.Module):
@@ -297,10 +333,10 @@ class VGGDistance(nn.Module):
         return loss.mean()
 
 
-class Lord:
+class Lord(nn.Module):
 
     def __init__(self, config=None):
-        super().__init__()
+        super(self, Lord).__init__()
         self.logger = get_logger(self)
         self.config = config
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
