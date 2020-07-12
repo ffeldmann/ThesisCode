@@ -225,13 +225,15 @@ class ResPoseNet(nn.Module):
                         new_state_dict[name] = v
                 new_state_dict.pop("layer4.fc.1.weight", None)
                 new_state_dict.pop("layer4.fc.1.bias", None)
+                new_state_dict.pop("fc.weight", None)
+                new_state_dict.pop("fc.bias", None)
             except KeyError as e:
                 print(f"Keyerror: {e}, trying different.")
                 state_dict = torch.load(path, map_location="cuda")
                 new_state_dict = {}
                 for k, v in state_dict.items():
-                    if k.startswith("content_encoder."):
-                        name = k.replace("content_encoder.", "")
+                    if k.startswith("module."):
+                        name = k.replace("module.", "")
                         new_state_dict[name] = v
                 new_state_dict.pop("layer4.fc.1.weight", None)
                 new_state_dict.pop("layer4.fc.1.bias", None)

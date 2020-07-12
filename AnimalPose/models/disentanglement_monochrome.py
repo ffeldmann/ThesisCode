@@ -30,6 +30,7 @@ class DisentangleMonochrome(ResPoseNet):
             self.logger.info(f"Load self pretrained encoder from {path}")
             state_dict = torch.load(path, map_location="cuda")["model"]
             new_state_dict = {}
+            import pdb; pdb.set_trace()
             for k, v in state_dict.items():
                 if k.startswith("backbone"):
                     name = k.replace("backbone.", "")

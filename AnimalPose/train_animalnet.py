@@ -6,7 +6,8 @@ import torch.optim as optim
 from edflow import TemplateIterator
 from edflow.util import retrieve
 
-from AnimalPose.utils.log_utils import hog_similarity, hist_similarity, generate_samples
+from AnimalPose.utils.log_utils import hog_similarity, hist_similarity, generate_samples, save_hog_image, \
+    save_hist_image
 from AnimalPose.utils.tensor_utils import numpy2torch, torch2numpy
 from AnimalPose.utils.perceptual_loss.models import PerceptualLoss
 from AnimalPose.utils.LossConstrained import LossConstrained
@@ -162,7 +163,15 @@ class Iterator(TemplateIterator):
             logs = {
                 "images": {
                     "image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
-                    "disentanglement": adjust_support(np.expand_dims(generate_samples(inputs0, model),0), "-1->1", "0->1"),
+                    "disentanglement": adjust_support(np.expand_dims(generate_samples(inputs0, model), 0), "-1->1",
+                                                      "0->1"),
+                    "pose_random": adjust_support(np.expand_dims(generate_samples(inputs0, model, pose_random=True), 0),
+                                                  "-1->1",
+                                                  "0->1"),
+                    "appearance_random": adjust_support(
+                        np.expand_dims(generate_samples(inputs0, model, appreance_random=True), 0), "-1->1",
+                        "0->1"),
+
                     "outputs": adjust_support(torch2numpy(predictions).transpose(0, 2, 3, 1), "-1->1", "0->1"),
                 },
                 "scalars": {
@@ -199,8 +208,50 @@ class Iterator(TemplateIterator):
 
             return logs
 
-        def eval_op():
-            return
+        def eval_op():  # np.concatenate((np.expand_dims(generate_samples(inputs0, model)),0),)*5)
+            from datetime import datetime
+            now = datetime.now()
+            mystring = now.strftime("%m-%d-%Y-%H-%M-%S")
+            n_samples = 4
+            out, hog, cosine_distances, hist_similarities, cosine_row, hist_column = generate_samples(inputs0, model,
+                                                                                                      n_samples)
+            out_pose, hog_pose, cosine_distances_pose, hist_similarities_pose, cosine_row_pose, hist_column_pose = generate_samples(
+                inputs0, model, n_samples, pose_random=True, )
+            out_appearance, hog_appearance, cosine_distances_appearance, hist_similarities_appearance, cosine_row_appearance, hist_column_appearance = generate_samples(
+                inputs0, model, n_samples, appreance_random=True)
+            export_path = "/export/home/ffeldman/tempfolder/"
+
+            save_hog_image(hog, out, n_samples, cosine_distances, cosine_row, export_path, mystring)
+            save_hist_image(out, n_samples, hist_similarities, hist_column, export_path, mystring)
+            logs = {
+
+                #"image_input_0": adjust_support(torch2numpy(inputs0).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                #"inputs1_flipped": adjust_support(torch2numpy(inputs1_flipped).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+                "disentanglement": adjust_support(
+                    np.concatenate(
+                        (np.expand_dims(out.transpose(1, 2, 0), 0),) * inputs0.size(0)),
+                    "-1->1", "0->1"),
+                "pose_random": adjust_support(
+                    np.concatenate((
+                                       np.expand_dims(
+                                           out_pose.transpose(1, 2, 0),
+                                           0),) * inputs0.size(0)),
+                    "-1->1", "0->1"),
+                "appearance_random": adjust_support(
+                    np.concatenate((np.expand_dims(
+                        out_appearance.transpose(1, 2, 0), 0),) * inputs0.size(
+                        0)),
+                    "-1->1", "0->1"),
+
+                #"test_preds": adjust_support(torch2numpy(kl_test_preds).transpose(0, 2, 3, 1), "-1->1", "0->1"),
+            }
+            return logs
+            # {"labels": {
+            #            "hogs": np.array(hog_values),
+            #            "hist": np.array(hist_values),
+            #         },
+            # "classified_correct": np.array([corrects.cpu().numpy()])
+            # }
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
 
